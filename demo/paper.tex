@@ -1,0 +1,32 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb}
+
+\title{A Small Polynomial}
+\author{Feather demo}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Evaluation}
+Consider the polynomial $p(x) = 1 + 2x + 3x^2$ over the real numbers.
+At $x = 2$, we have
+\[
+p(2) = 1 + 2 \cdot 2 + 3 \cdot 2^2 = 17.
+\]
+
+\section{Horner's method}
+The same polynomial can be written as
+\begin{align*}
+p(x) &= 1 + x(2 + 3x), \\
+p(2) &= 1 + 2(2 + 6) = 17.
+\end{align*}
+This form evaluates the polynomial without computing powers separately.
+
+\section{A simple identity}
+The sum of the first $n$ positive integers is
+\[
+\sum_{k=1}^{n} k = \frac{n(n+1)}{2}.
+\]
+
+\end{document}

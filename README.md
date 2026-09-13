@@ -20,6 +20,8 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 - Open files or folders with `feather .`.
 - Built-in feature guide with Markdown, math, and LaTeX examples.
 
+Try the [demo folder](demo/README.md): `cd demo && feather .` from the repository root.
+
 ## Install on macOS
 
 Paste into Terminal:
