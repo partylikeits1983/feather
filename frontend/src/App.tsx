@@ -3,6 +3,8 @@ import { EditorView } from '@codemirror/view';
 import { api, desktop } from './api';
 import { DocumentSession } from './state/document';
 import { welcome } from './welcome';
+import guideText from './guide.md?raw';
+import { FeatureMenu } from './components/FeatureMenu';
 import { basename, dirname, isText, resolveRelative, type Appearance, type Entry, type Workspace } from './types';
 import { Editor } from './editor/Editor';
 import { Preview, TexPreview, type PreviewHandle } from './preview/Preview';
@@ -23,6 +25,10 @@ export function App() {
   if (!scratch.current) scratch.current = new DocumentSession('Scratchpad.md', stored('feather.scratchpad', welcome), 'scratch', async text => {
     localStorage.setItem('feather.scratchpad', text); return 'scratch';
   });
+  const guide = useRef<DocumentSession>();
+  if (!guide.current) guide.current = new DocumentSession('Feather Guide.md', guideText, 'guide', async () => 'guide');
+  const guideReturn = useRef<{ session: DocumentSession; mode: 'split' | 'source' | 'preview' | 'diff' }>();
+  const guideLine = useRef<number | null>(null);
   const [session, setSession] = useState(scratch.current), [workspace, setWorkspace] = useState<Workspace | null>(null);
   const current = useRef(session), workspaceRef = useRef(workspace); current.current = session; workspaceRef.current = workspace;
   const [status, setStatus] = useState(session.status), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -45,7 +51,7 @@ export function App() {
   const [locked, setLocked] = useState(false), navigating = useRef(false);
   const editor = useRef<EditorView | null>(null), diffEditor = useRef<EditorView | null>(null), preview = useRef<PreviewHandle | null>(null), panes = useRef<HTMLDivElement>(null);
   const scrollLock = useRef({ side: '', until: 0 });
-  const isScratch = session === scratch.current, tex = !isScratch && /\.tex$/i.test(session.path);
+  const isScratch = session === scratch.current, isGuide = session === guide.current, isLocal = isScratch || isGuide, tex = !isLocal && /\.tex$/i.test(session.path);
 
   useEffect(() => { const media = matchMedia('(prefers-color-scheme: dark)'); const update = () => setSystemDark(media.matches); media.addEventListener('change', update); return () => media.removeEventListener('change', update); }, []);
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; store('feather.appearance', appearance); }, [appearance, dark]);
@@ -67,6 +73,9 @@ export function App() {
     if (!workspaceRef.current) { setNotice('Open a folder before starting a terminal.'); return; }
     setTerminalStarted(true); setTerminalVisible(value => { if (value) (mode === 'diff' ? diffEditor.current : editor.current)?.focus(); return !value; });
   }
+  function toggleZen() {
+    setZen(value => !value); setSettings(false); setMenu(null);
+  }
   async function exportPdf() {
     if (exporting) return; setExporting(true); setError('');
     try {
@@ -78,7 +87,7 @@ export function App() {
         if (path) setNotice(`Saved ${path}`);
       } else {
         const { exportMarkdown } = await import('./preview/export');
-        const path = await exportMarkdown(active.text, active.path, active === scratch.current ? undefined : ws?.id);
+        const path = await exportMarkdown(active.text, active.path, active === scratch.current || active === guide.current ? undefined : ws?.id);
         if (path) setNotice(`Saved ${path}`);
       }
     } catch (error) { report(error); } finally { setExporting(false); }
@@ -110,7 +119,31 @@ export function App() {
   const requested = () => transition(async () => { const ws = await api.requested(); if (ws) await activate(ws); });
   const close = () => void transition(async () => { await api.quit(); });
 
-  const callbacks = useRef({ requested, choose, close, openFile }); callbacks.current = { requested, choose, close, openFile };
+  function openGuide(section = '') {
+    setSettings(false);
+    void transition(async () => {
+      const line = section ? Math.max(1, guideText.split('\n').findIndex(text => text === `## ${section}`) + 1) : 1;
+      if (current.current !== guide.current) {
+        guideReturn.current = { session: current.current, mode };
+        guideLine.current = line; attach(guide.current!);
+      } else if (mode === 'source' || mode === 'diff') {
+        guideLine.current = line;
+      } else {
+        requestAnimationFrame(() => { scrollEditor(line, false); preview.current?.scrollToLine(line); });
+      }
+      setMode('split');
+    });
+  }
+  function leaveGuide() {
+    void transition(async () => {
+      const previous = guideReturn.current;
+      if (previous && previous.session !== scratch.current && workspaceRef.current) await load(workspaceRef.current, previous.session.path);
+      else attach(scratch.current!);
+      setMode(previous?.mode || 'split'); guideReturn.current = undefined; guideLine.current = null;
+    });
+  }
+
+  const callbacks = useRef({ requested, choose, close, openFile, toggleZen }); callbacks.current = { requested, choose, close, openFile, toggleZen };
   useEffect(() => {
     if (!desktop) return;
     let cancelled = false; const offs: (() => void)[] = []; let timer: ReturnType<typeof setTimeout>;
@@ -124,7 +157,7 @@ export function App() {
         timer = setTimeout(() => {
           setRevision(n => n + 1);
           const active = current.current, ws = workspaceRef.current;
-          if (!ws || active === scratch.current || navigating.current) return;
+          if (!ws || active === scratch.current || active === guide.current || navigating.current) return;
           // Read after any in-flight write has settled; otherwise a watch notification can return an obsolete version.
           void (async () => {
             if (active.status === 'saving') await active.flush().catch(() => {});
@@ -140,6 +173,7 @@ export function App() {
           case 'open-file': callbacks.current.choose(false); break;
           case 'open-folder': callbacks.current.choose(true); break;
           case 'new-file': begin({ kind: 'file', path: '' }); break;
+          case 'zen': callbacks.current.toggleZen(); break;
           case 'save': void current.current.flush().catch(report); break;
           case 'install-cli': void api.install().then(setNotice).catch(report); break;
           case 'quit': callbacks.current.close(); break;
@@ -153,6 +187,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // Capture before CodeMirror/Vim/xterm can interpret the reserved Zen shortcut.
+    const zenShortcut = (event: KeyboardEvent) => {
+      if (!(modifier === '⌘' ? event.metaKey : event.ctrlKey) || event.altKey || !event.shiftKey || event.isComposing) return;
+      if (event.key !== 'Enter') return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (!event.repeat) callbacks.current.toggleZen();
+    };
     const handler = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.code === 'Backquote') { event.preventDefault(); toggleTerminal(); return; }
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -175,8 +216,9 @@ export function App() {
       if (key === '\\') setMode(value => value === 'split' ? 'source' : 'split');
     };
     const unload = (event: BeforeUnloadEvent) => { if (current.current.dirty) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('keydown', zenShortcut, true);
     window.addEventListener('keydown', handler); window.addEventListener('beforeunload', unload);
-    return () => { window.removeEventListener('keydown', handler); window.removeEventListener('beforeunload', unload); };
+    return () => { window.removeEventListener('keydown', zenShortcut, true); window.removeEventListener('keydown', handler); window.removeEventListener('beforeunload', unload); };
   }, []);
 
   useEffect(() => {
@@ -253,29 +295,29 @@ export function App() {
     <header class="app-header">
       <div class="brand" style={{ width: sidebar ? sidebarWidth : 168 }}><span class="brand-mark"><Icon name="feather" size={24} /></span><span>feather</span><span class="version">0.1</span></div>
       <div class="header-center"><span class="workspace-dot" /><span>{workspace?.name || 'A quiet place for your thoughts'}</span></div>
-      <div class="header-actions">{button('sidebar', `Toggle sidebar (${modifier}B)`, () => setSidebar(!sidebar), sidebar)}<span class="toolbar-separator" />{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}{button('keyboard', 'Keyboard shortcuts', () => setShortcuts(true))}</div>
+      <div class="header-actions">{button('sidebar', `Toggle sidebar (${modifier}B)`, () => setSidebar(!sidebar), sidebar)}<span class="toolbar-separator" />{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}{button('keyboard', 'Keyboard shortcuts', () => setShortcuts(true))}<FeatureMenu zen={zen} onOpen={openGuide} onShortcuts={() => setShortcuts(true)} /></div>
     </header>
     <div class="app-body">
       {sidebar && <><aside class="sidebar" style={{ width: sidebarWidth }}>
         <div class="sidebar-top"><span class="eyebrow">WORKSPACE</span><button class="icon-button" title="Open folder" aria-label="Open folder" onClick={() => choose(true)}><Icon name="folder" /></button></div>
         <button class="quick-open" onClick={() => { setQuery(''); setQuick(true); }}><Icon name="search" size={14} /><span>Find a file…</span><kbd>{modifier}P</kbd></button>
-        {workspace ? <><div class="workspace-label workspace-heading"><button class="workspace-toggle" aria-expanded={!workspaceCollapsed} aria-controls="workspace-files" onClick={() => setWorkspaceCollapsed(!workspaceCollapsed)}><Icon name="chevron" size={11} class={workspaceCollapsed ? '' : 'rotated'} /><span>{workspace.name}</span></button><div class="explorer-actions">{button('new-file', 'New file', () => begin({ kind: 'file', path: '' }))}{button('new-folder', 'New folder', () => begin({ kind: 'folder', path: '' }))}</div></div><Explorer collapsed={workspaceCollapsed} workspace={workspace} active={isScratch ? '' : session.path} revision={revision} onOpen={openFile} onMenu={(entry, x, y) => setMenu({ entry, x, y })} onError={report} /></> : <div class="workspace-empty"><div class="workspace-label"><Icon name="chevron" size={11} class="rotated" /><span>Getting started</span></div><button class={`scratch-row ${isScratch ? 'selected' : ''}`} onClick={() => void transition(async () => attach(scratch.current!))}><span class="file-glyph">M</span>Scratchpad.md</button><p>Your next idea<br />starts with a folder.</p><button class="open-folder-button" onClick={() => choose(true)}><Icon name="folder" size={15} />Open a folder<Icon name="arrow" size={14} /></button><button class="text-button" onClick={() => choose(false)}>or open a file</button></div>}
+        {workspace ? <><div class="workspace-label workspace-heading"><button class="workspace-toggle" aria-expanded={!workspaceCollapsed} aria-controls="workspace-files" onClick={() => setWorkspaceCollapsed(!workspaceCollapsed)}><Icon name="chevron" size={11} class={workspaceCollapsed ? '' : 'rotated'} /><span>{workspace.name}</span></button><div class="explorer-actions">{button('new-file', 'New file', () => begin({ kind: 'file', path: '' }))}{button('new-folder', 'New folder', () => begin({ kind: 'folder', path: '' }))}</div></div><Explorer collapsed={workspaceCollapsed} workspace={workspace} active={isLocal ? '' : session.path} revision={revision} onOpen={openFile} onMenu={(entry, x, y) => setMenu({ entry, x, y })} onError={report} /></> : <div class="workspace-empty"><div class="workspace-label"><Icon name="chevron" size={11} class="rotated" /><span>Getting started</span></div><button class={`scratch-row ${isScratch ? 'selected' : ''}`} onClick={() => void transition(async () => attach(scratch.current!))}><span class="file-glyph">M</span>Scratchpad.md</button><p>Your next idea<br />starts with a folder.</p><button class="open-folder-button" onClick={() => choose(true)}><Icon name="folder" size={15} />Open a folder<Icon name="arrow" size={14} /></button><button class="text-button" onClick={() => choose(false)}>or open a file</button></div>}
         <div class="sidebar-bottom">{workspace && <button class="scratch-link" onClick={() => void transition(async () => attach(scratch.current!))}><Icon name="feather" size={14} />Scratchpad</button>}</div>
       </aside><div class="resize-handle sidebar-resize" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" tabIndex={0} aria-valuenow={sidebarWidth} aria-valuemin={180} aria-valuemax={380} onPointerDown={event => resize(event, 'sidebar')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSidebarWidth(n => Math.max(180, Math.min(380, n + (event.key === 'ArrowLeft' ? -10 : 10)))); }} /></>}
       <main class="main">
-        <div class="document-toolbar"><div class="document-title"><span class="file-glyph">{tex ? 'T' : 'M'}</span><strong>{basename(session.path)}</strong>{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{!isScratch && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
-          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}<button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), mode === 'source')}{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</div></div>
+        <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{tex ? 'T' : 'M'}</span><strong>{basename(session.path)}</strong>{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isLocal && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
+          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}<FeatureMenu zen={zen} onOpen={openGuide} onShortcuts={() => setShortcuts(true)} /></>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}<button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), mode === 'source')}{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</div></div>
         </div>
         {(error || status === 'error' || status === 'conflict') && <div class="error-banner" role="alert"><span>{error || session.error.replace('CONFLICT: ', '')}</span>{status === 'conflict' && <><button onClick={() => { if (workspace) void api.read(workspace.id, session.path).then(setDisk).catch(report); }}>Review disk</button><button onClick={() => begin({ kind: 'copy', path: dirname(session.path) })}>Save a copy</button></>}{status === 'error' && <button onClick={() => void session.flush().catch(report)}>Retry save</button>}{error && <button class="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><Icon name="close" size={14} /></button>}</div>}
         <div class={`panes mode-${mode}`} ref={panes}>
           <section class="source-pane" style={{ width: mode === 'split' ? `${split}%` : '100%' }} aria-label="Source editor">
-            <div class="pane-label"><span>{tex ? 'TEX' : 'MARKDOWN'}</span><span>{isScratch ? 'Your local scratchpad' : dirname(session.path)}</span></div>
-            <Editor session={session} dark={dark} locked={locked} vimEnabled={vimEnabled} onView={view => { editor.current = view; }} onScroll={line => syncScroll('source', line)} />
+            <div class="pane-label"><span>{tex ? 'TEX' : 'MARKDOWN'}</span><span>{isGuide ? 'Feature guide · read only' : isScratch ? 'Your local scratchpad' : dirname(session.path)}</span></div>
+            <Editor session={session} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { editor.current = view; }} onScroll={line => syncScroll('source', line)} />
           </section>
           {mode === 'split' && <div class="resize-handle split-resize" role="separator" aria-label="Resize editor and preview" aria-orientation="vertical" tabIndex={0} aria-valuenow={split} aria-valuemin={25} aria-valuemax={75} onPointerDown={event => resize(event, 'split')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSplit(n => Math.max(25, Math.min(75, n + (event.key === 'ArrowLeft' ? -2 : 2)))); }} />}
-          {mode === 'diff' ? <Suspense fallback={<div class="git-empty">Loading diff…</div>}><GitDiff session={session} workspaceId={isScratch ? undefined : workspace?.id} dark={dark} locked={locked} vimEnabled={vimEnabled} onView={view => { diffEditor.current = view; }} /></Suspense> : mode !== 'source' && <section class="preview-pane" aria-label="Document preview"><div class="pane-label"><span>{tex ? 'PDF PREVIEW' : 'PREVIEW'}</span><div class="preview-tools"><span class="live-dot" />Live{!tex && button('link', 'Synchronize scrolling', () => setSync(!sync), sync)}</div></div>{tex && workspace ? <TexPreview key={`${workspace.id}-${session.path}`} session={session} workspaceId={workspace.id} /> : <Preview session={session} workspaceId={isScratch ? undefined : workspace?.id} imageRevision={revision} onLink={followLink} onSource={line => { if (mode === 'preview') setMode('split'); scrollEditor(line, true); }} onScroll={line => syncScroll('preview', line)} onHandle={handle => { preview.current = handle; }} />}</section>}
+          {mode === 'diff' ? <Suspense fallback={<div class="git-empty">Loading diff…</div>}><GitDiff session={session} workspaceId={isLocal ? undefined : workspace?.id} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { diffEditor.current = view; }} /></Suspense> : mode !== 'source' && <section class="preview-pane" aria-label="Document preview"><div class="pane-label"><span>{tex ? 'PDF PREVIEW' : 'PREVIEW'}</span><div class="preview-tools"><span class="live-dot" />Live{!tex && button('link', 'Synchronize scrolling', () => setSync(!sync), sync)}</div></div>{tex && workspace ? <TexPreview key={`${workspace.id}-${session.path}`} session={session} workspaceId={workspace.id} /> : <Preview session={session} workspaceId={isLocal ? undefined : workspace?.id} imageRevision={revision} onLink={followLink} onSource={line => { if (mode === 'preview') setMode('split'); scrollEditor(line, true); }} onScroll={line => syncScroll('preview', line)} onHandle={handle => { preview.current = handle; if (handle && isGuide && guideLine.current !== null) { const line = guideLine.current; guideLine.current = null; scrollEditor(line, false); handle.scrollToLine(line); } }} />}</section>}
         </div>
-        {terminalStarted && workspace && <Suspense fallback={<div class="terminal-loading">Starting Bash…</div>}><TerminalPanel visible={terminalVisible} dark={dark} profile={profile} zoom={zoom} workspaceId={workspace.id} directory={isScratch ? '' : dirname(session.path)} onClose={() => { setTerminalVisible(false); (mode === 'diff' ? diffEditor.current : editor.current)?.focus(); }} /></Suspense>}
+        {terminalStarted && workspace && <Suspense fallback={<div class="terminal-loading">Starting Bash…</div>}><TerminalPanel visible={terminalVisible} dark={dark} profile={profile} zoom={zoom} workspaceId={workspace.id} directory={isLocal ? '' : dirname(session.path)} onClose={() => { setTerminalVisible(false); (mode === 'diff' ? diffEditor.current : editor.current)?.focus(); }} /></Suspense>}
       </main>
     </div>
     {settings && <><div class="popover-dismiss" onClick={() => setSettings(false)} /><div class="appearance-popover" role="region" aria-label="Settings"><label class="profile-setting"><span>UI profile</span><select aria-label="UI profile" value={profile} onChange={event => setProfile(event.currentTarget.value)}><option value="feather">Feather</option><option value="github">GitHub</option><option value="midnight">Midnight</option></select></label><div class="theme-options">{(['system', 'light', 'dark'] as const).map(value => <button class={appearance === value ? 'chosen' : ''} aria-pressed={appearance === value} onClick={() => setAppearance(value)}><Icon name={value === 'system' ? 'monitor' : value === 'light' ? 'sun' : 'moon'} size={19} /><span>{value[0].toUpperCase() + value.slice(1)}</span></button>)}</div><div class="zoom-settings"><span>Zoom</span><button aria-label="Zoom out" onClick={() => setZoom(value => Math.max(.7, Math.round((value - .1) * 10) / 10))}>−</button><button aria-label="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(value => Math.min(1.6, Math.round((value + .1) * 10) / 10))}>+</button></div><div class="editor-settings"><label class="vim-setting"><span>Zen mode<small>Hide the header and sidebar.</small></span><input type="checkbox" role="switch" aria-label="Zen mode" checked={zen} onChange={event => setZen(event.currentTarget.checked)} /></label><label class="vim-setting"><span>Vim mode<small>Navigate with h j k l. Press i to write.<br />Esc returns to Normal mode.</small></span><input type="checkbox" role="switch" aria-label="Vim mode" checked={vimEnabled} onChange={event => setVimEnabled(event.currentTarget.checked)} /></label></div></div></>}
@@ -284,7 +326,7 @@ export function App() {
     {deleteEntry && <Dialog title="Move to trash?" onClose={() => setDeleteEntry(null)}><p class="dialog-description">“{deleteEntry.name}”{deleteEntry.isDir ? ' and everything inside it' : ''} will move to your system trash.</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => setDeleteEntry(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { if (!workspace) return; await api.trash(workspace.id, deleteEntry.path); if (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/')) attach(scratch.current!); setDeleteEntry(null); setRevision(n => n + 1); })}>Move to trash</button></div></Dialog>}
     {disk && <Dialog title="This file has two versions" class="conflict-dialog" onClose={() => setDisk(null)}><p class="dialog-description">Your text is preserved. Compare it with the version on disk before choosing what to save.</p><div class="conflict-columns"><div><h3>Your edits</h3><pre>{session.text}</pre></div><div><h3>On disk</h3><pre>{disk.contents}</pre></div></div><div class="dialog-buttons"><button class="secondary-button" onClick={() => { session.reload(disk.contents, disk.version); setDisk(null); setError(''); }}>Use disk version</button><button class="primary-button" onClick={() => { session.version = disk.version; session.status = 'modified'; void session.flush().then(() => { setDisk(null); setError(''); }).catch(report); }}>Save my version</button></div></Dialog>}
     {quick && <Dialog title="Find a file" class="quick-dialog" onClose={() => setQuick(false)}><div class="quick-input"><Icon name="search" size={18} /><input autoFocus aria-label="Find a file" placeholder="Type a file name…" value={query} onInput={event => setQuery(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setQuickIndex(n => Math.max(0, Math.min(results.length - 1, n + (event.key === 'ArrowDown' ? 1 : -1)))); } if (event.key === 'Enter' && results[quickIndex]) { openFile(results[quickIndex]); setQuick(false); } }} /><kbd>esc</kbd></div><div class="quick-results" role="listbox" aria-label="Matching files">{results.map((path, index) => <button role="option" aria-selected={quickIndex === index} class={quickIndex === index ? 'highlighted' : ''} onClick={() => { openFile(path); setQuick(false); }}><Icon name="file" /><span>{basename(path)}<small>{dirname(path) || workspace?.name}</small></span><Icon name="arrow" size={14} /></button>)}{!results.length && <p>{workspace ? 'No matching files.' : 'Open a folder to find your documents.'}</p>}</div>{truncated && <p class="quick-hint">Showing the first 200 matches within 50,000 entries. Narrow your search.</p>}</Dialog>}
-    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><p class="dialog-description">Stay with your words. Keep your hands on the keys.</p><div class="shortcut-list">{[['New Markdown file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
+    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New Markdown file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} ⇧ Enter`], ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
     {notice && <div class="toast" role="status"><Icon name="check" size={16} /><span>{notice}</span><button class="icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><Icon name="close" size={14} /></button></div>}
   </div>;
 }

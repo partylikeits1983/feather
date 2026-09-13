@@ -13,7 +13,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
   onScroll: (line: number) => void; onHandle: (handle: PreviewHandle | null) => void; imageRevision: number;
 }) {
   const scroll = useRef<HTMLDivElement>(null), article = useRef<HTMLElement>(null);
-  const [result, setResult] = useState({ html: '', truncated: false });
+  const [result, setResult] = useState<{ html: string; truncated: boolean; document?: DocumentSession }>({ html: '', truncated: false });
   const [error, setError] = useState('');
   const blocks = useRef<HTMLElement[]>([]);
   useEffect(() => {
@@ -29,7 +29,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
       busy = false;
       if (event.data.id === revision) {
         if (event.data.error) setError(event.data.error);
-        else { setError(''); setResult(event.data); }
+        else { setError(''); setResult({ ...event.data, document: session }); }
       }
       if (pending) send();
     };
@@ -40,6 +40,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
   }, [session]);
 
   useEffect(() => {
+    if (result.document !== session) { onHandle(null); return; }
     blocks.current = Array.from(article.current?.querySelectorAll<HTMLElement>('[data-source-line]') || []);
     onHandle({ scrollToLine(line) {
       let closest = blocks.current[0];
@@ -54,7 +55,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
       } catch { img.alt = `${img.alt || 'Image'} (outside the opened folder)`; }
     }
     return () => { cancelled = true; onHandle(null); };
-  }, [result.html, workspaceId, imageRevision]);
+  }, [result.html, result.document, session, workspaceId, imageRevision]);
 
   return <div class="preview-scroll" ref={scroll} onScroll={() => {
     const top = scroll.current!.getBoundingClientRect().top + 40;
@@ -73,7 +74,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
       if ((event.target as Element).closest('a')) return;
       const block = (event.target as Element).closest<HTMLElement>('[data-source-line]');
       if (block) onSource(Number(block.dataset.sourceLine));
-    }} dangerouslySetInnerHTML={{ __html: result.html }} />
+    }} dangerouslySetInnerHTML={{ __html: result.document === session ? result.html : '' }} />
     {result.truncated && <div class="preview-notice"><Icon name="eye" /> Showing the beginning of this large document to keep editing responsive. The full source is editable and saved.</div>}
   </div>;
 }

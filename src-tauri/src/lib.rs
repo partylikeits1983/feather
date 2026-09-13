@@ -99,6 +99,18 @@ pub fn run() {
             )?)?;
             menu.append(&file)?;
             menu.append(&edit)?;
+            menu.append(&Submenu::with_items(
+                app,
+                "View",
+                true,
+                &[&MenuItem::with_id(
+                    app,
+                    "zen",
+                    "Toggle Zen Mode",
+                    true,
+                    Some("CmdOrCtrl+Shift+Enter"),
+                )?],
+            )?)?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let _ = app.emit("menu-action", event.id().as_ref());

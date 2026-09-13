@@ -18,6 +18,7 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 - Editable Git diff and a Bash terminal (Ctrl + backtick).
 - Save Markdown and LaTeX directly to PDF.
 - Open files or folders with `feather .`.
+- Built-in feature guide with Markdown, math, and LaTeX examples.
 
 ## Install on macOS
 

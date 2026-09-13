@@ -46,6 +46,8 @@ On macOS/Linux, **File → Install ‘feather’ Command…** also creates a lau
 
 ## Writing
 
+The **Features** dropdown opens the built-in `Feather Guide.md` with a complete feature list, rendered math, a LaTeX example, and export instructions. Select a topic to jump to its section. It preserves your current document and workspace; **Back** returns to your file.
+
 - Open a file or folder. Directories expand on demand; quick open searches only when requested.
 - Edit Markdown with syntax highlighting, line numbers, undo/redo, search, multiple selections, and line wrapping.
 - Preview GFM tables, task lists, local images, links, and KaTeX mathematics. `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, aligned equations, and fenced `math` are supported.
@@ -53,7 +55,7 @@ On macOS/Linux, **File → Install ‘feather’ Command…** also creates a lau
 - Outside edits reload clean documents. Dirty conflicts keep your text and offer side-by-side review, explicit overwrite, or save a copy. Deletion uses the system trash.
 - Drag the pane dividers, switch source/split/preview mode, or double-click a rendered block to jump to its source. The chain button toggles source-position scroll synchronization.
 - Settings offers Feather, GitHub, and Midnight UI profiles, each with System (default), Light, and Dark appearance. Profiles apply instantly to the editor, preview, explorer, diff, and terminal, and persist locally.
-- **Zen mode** hides the header, sidebar, and pane labels. Settings and an Exit Zen mode button stay available in the compact document toolbar. Toggling Zen preserves edits and undo history.
+- **⌘⇧Enter** (Ctrl+Shift+Enter on Windows/Linux) toggles **Zen mode**, which hides the header, sidebar, and pane labels. Settings and an Exit Zen mode button stay available in the compact document toolbar. Toggling Zen preserves edits and undo history.
 - Click the workspace heading to collapse or expand the entire tree; expanded subfolders are preserved.
 - **Settings → Vim mode** enables modal editing and persists between launches. Use `h/j/k/l`, `w/b`, `gg/G`, `/` search, `v` selection, `i/a/o` to insert, `Esc` for Normal mode, `u` to undo and `:w` to save. Turning it off preserves the document and undo history. The Vim extension loads only when enabled.
 - New File / New Folder buttons sit beside the workspace name at the top of the explorer.
@@ -67,6 +69,9 @@ On macOS/Linux, **File → Install ‘feather’ Command…** also creates a lau
 | New file | ⌘N | Ctrl+N |
 | Open file / folder | ⌘O / ⌘⇧O | Ctrl+O / Ctrl+Shift+O |
 | Save | ⌘S | Ctrl+S |
+| Toggle Zen mode | ⌘⇧Enter | Ctrl+Shift+Enter |
+| Undo | ⌘Z | Ctrl+Z |
+| Redo | ⌘⇧Z | Ctrl+Shift+Z |
 | Quick open | ⌘P | Ctrl+P |
 | Search document | ⌘F | Ctrl+F |
 | Toggle sidebar | ⌘B | Ctrl+B |

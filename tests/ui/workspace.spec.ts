@@ -315,3 +315,66 @@ test('UI profiles recolor the editor and diff, with green additions and red dele
   await expect(page.getByRole('combobox', { name: 'UI profile' })).toHaveValue('github');
   await expect(page.locator('.app-header')).toHaveCSS('background-color', 'rgb(13, 17, 23)');
 });
+
+test('Features opens the guide, jumps to examples, exports, and returns to the saved document', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# Notes before the guide');
+  await page.getByRole('button', { name: 'Features', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Feature guide', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Feather feature guide', exact: true })).toBeInViewport();
+  await expect(page.locator('.document-title strong')).toHaveText('Feather Guide.md');
+  await expect(source).toHaveAttribute('aria-readonly', 'true');
+  await expect(page.getByRole('tree', { name: 'Files' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { files: Record<string, { contents: string }> } }).testWorkspace.files['notes.md'].contents)).toBe('# Notes before the guide');
+  await expect(page.locator('.katex-error')).toHaveCount(0);
+  await expect(page.locator('.markdown-body .katex')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Features', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'LaTeX and PDF', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'LaTeX and PDF', exact: true })).toBeInViewport();
+  await page.screenshot({ path: 'artifacts/feather-feature-guide.png' });
+  await page.getByRole('button', { name: 'Source view', exact: true }).click();
+  await page.getByRole('button', { name: 'Features', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Saving and exporting', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Saving and exporting', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: 'Export PDF', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { exported: string } }).testWorkspace.exported)).toContain('Feather feature guide');
+  await page.evaluate(() => {
+    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+    state.files['notes.md'] = { contents: '# Changed while reading the guide', version: '3' };
+    state.emit('workspace-changed', [1, ['notes.md']]);
+  });
+  await page.getByRole('button', { name: 'Back', exact: false }).click();
+  await expect(page.getByRole('heading', { name: 'Changed while reading the guide' })).toBeVisible();
+  await expect(source).not.toHaveAttribute('aria-readonly', 'true');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('Zen shortcut leaves Undo and Redo intact in source and diff, and works through the native menu', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.type('Added ');
+  await page.keyboard.press('Meta+Shift+Enter');
+  await expect(page.locator('.app-header')).toBeHidden();
+  await expect(source).toContainText('Added # My notes');
+  await source.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', metaKey: true, shiftKey: true, repeat: true });
+  await expect(page.locator('.app-header')).toBeHidden();
+  await page.keyboard.press('Meta+z');
+  await expect(source).not.toContainText('Added');
+  await expect(page.locator('.app-header')).toBeHidden();
+  await page.keyboard.press('Meta+Shift+z');
+  await expect(source).toContainText('Added # My notes');
+  await page.keyboard.press('Meta+Shift+Enter');
+  await expect(page.locator('.app-header')).toBeVisible();
+  await page.getByRole('button', { name: 'Git diff', exact: true }).click();
+  const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
+  await current.focus(); await page.keyboard.press('Meta+Shift+Enter');
+  await expect(page.locator('.app-header')).toBeHidden();
+  await expect(current).toContainText('Added # My notes');
+  await page.evaluate(() => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', 'zen'));
+  await expect(page.locator('.app-header')).toBeVisible();
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'A few useful shortcuts' });
+  await expect(dialog.locator('.shortcut-list > div').filter({ hasText: 'Toggle Zen mode' })).toContainText('⇧ Enter');
+  await expect(dialog).not.toContainText('Stay with your words.');
+});
