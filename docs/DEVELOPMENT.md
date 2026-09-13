@@ -44,6 +44,14 @@ FEATHER_BIN="$PWD/target/release/feather-desktop" feather examples/notes.md
 
 On macOS/Linux, **File → Install ‘feather’ Command…** also creates a launcher in `~/.local/bin` without replacing an existing command. Add that directory to PATH and keep the app in its installed location. On Windows, put `feather.exe` and `feather-desktop.exe` together in a directory on PATH. Subsequent launches forward the path to the existing process.
 
+### Updating on macOS
+
+Quit Feather, then run `feather update` (or `~/.local/bin/feather update`) from macOS Terminal. Rerunning the [source installer](../scripts/install-macos.sh) does the same thing. The updater downloads the current installer, fast-forwards its cached checkout to GitHub's `main`, builds the app and CLI, replaces `~/Applications/Feather.app` and `~/.local/bin/feather`, and opens Feather. The existing Desktop shortcut continues to work. The previous app bundle is removed after replacement succeeds; documents, preferences, and scratchpad data are preserved.
+
+The source cache lives in `~/Library/Caches/Feather/source`. Updates stop if it contains local edits, local-only commits, another branch, or a different remote. Build or download failures leave the installed app in place. Use an external terminal: quitting Feather also closes its embedded shell. Updates are explicit; Feather does not check the network in the background. Windows and Linux currently require rebuilding from source.
+
+For a custom installation, reuse the same `FEATHER_SOURCE_DIR`, `FEATHER_APPLICATIONS_DIR`, `FEATHER_DESKTOP_DIR`, and `FEATHER_BIN_DIR` overrides on each update. `FEATHER_REPO` selects a different Git remote; `FEATHER_SKIP_OPEN=1` suppresses reopening. A folder literally named `update` can still be opened with `feather ./update`.
+
 ## Writing
 
 The **Features** menu in the native application menu bar (at the top of the screen on macOS) opens the built-in `Feather Guide.md` with a complete feature list, rendered math, a LaTeX example, and export instructions. Select a topic to jump to its section. It preserves your current document and workspace; **Back** returns to your file.
@@ -132,6 +140,7 @@ npm run test:ui
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
+python3 -m unittest discover -s scripts/tests -v  # macOS installer checks
 cargo bench -p feather-core --bench filesystem
 npm run bench:preview
 ```

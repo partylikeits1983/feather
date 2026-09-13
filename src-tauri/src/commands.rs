@@ -328,7 +328,6 @@ pub async fn install_cli() -> CommandResult<String> {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let dest = dir.join("feather");
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-        let quoted = executable.to_string_lossy().replace('\'', "'\\''");
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -339,7 +338,7 @@ pub async fn install_cli() -> CommandResult<String> {
                     dest.display()
                 )
             })?;
-        file.write_all(format!("#!/bin/sh\nexec '{quoted}' \"$@\" >/dev/null 2>&1 &\n").as_bytes())
+        file.write_all(cli_launcher(&executable).as_bytes())
             .map_err(|e| e.to_string())?;
         file.set_permissions(fs::Permissions::from_mode(0o755))
             .map_err(|e| e.to_string())?;
@@ -352,5 +351,63 @@ pub async fn install_cli() -> CommandResult<String> {
     #[cfg(not(unix))]
     {
         Err("Build the feather-cli crate and put feather.exe on PATH alongside feather-desktop.exe. See README for installation.".into())
+    }
+}
+
+#[cfg(unix)]
+fn cli_launcher(executable: &std::path::Path) -> String {
+    let quoted = executable.to_string_lossy().replace('\'', "'\\''");
+    #[cfg(target_os = "macos")]
+    let updater = format!(
+        "exec /bin/bash -c '{}'",
+        include_str!("../../scripts/update-macos.sh").replace('\'', "'\\''")
+    );
+    #[cfg(not(target_os = "macos"))]
+    let updater = "echo 'feather update currently supports macOS.' >&2; exit 1";
+    format!(
+        "#!/bin/sh\n# Feather launcher\ncase \"${{1-}}\" in\n  --version|-V) echo 'feather {version}'; exit 0 ;;\n  --help|-h) echo 'Usage: feather [FILE | FOLDER] | update'; exit 0 ;;\n  update) [ \"$#\" -eq 1 ] || {{ echo 'Usage: feather update' >&2; exit 1; }}\n    {updater} ;;\nesac\nexec '{quoted}' \"$@\" >/dev/null 2>&1 &\n",
+        version = env!("CARGO_PKG_VERSION")
+    )
+}
+
+#[cfg(all(test, unix))]
+mod launcher_tests {
+    use super::cli_launcher;
+    use std::{fs, process::Command};
+
+    #[test]
+    fn launcher_handles_quoted_paths_and_update_arguments() {
+        let dir = tempfile::tempdir().unwrap();
+        let launcher = dir.path().join("feather");
+        fs::write(
+            &launcher,
+            cli_launcher(std::path::Path::new(
+                "/Applications/Writer's Apps/Feather.app/Contents/MacOS/feather-desktop",
+            )),
+        )
+        .unwrap();
+        let syntax = Command::new("/bin/sh")
+            .arg("-n")
+            .arg(&launcher)
+            .output()
+            .unwrap();
+        assert!(syntax.status.success(), "{syntax:?}");
+        let version = Command::new("/bin/sh")
+            .arg(&launcher)
+            .arg("--version")
+            .output()
+            .unwrap();
+        assert!(version.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&version.stdout).trim(),
+            concat!("feather ", env!("CARGO_PKG_VERSION"))
+        );
+        let invalid = Command::new("/bin/sh")
+            .arg(&launcher)
+            .args(["update", "extra"])
+            .output()
+            .unwrap();
+        assert!(!invalid.status.success());
+        assert!(String::from_utf8_lossy(&invalid.stderr).contains("Usage: feather update"));
     }
 }

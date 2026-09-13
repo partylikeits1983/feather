@@ -1029,6 +1029,9 @@ dependencies = [
 [[package]]
 name = "feather-cli"
 version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "feather-core"

@@ -30,8 +30,18 @@ Paste into Terminal:
 
 [The script](scripts/install-macos.sh) installs missing tools through Homebrew, clones this repository, and builds Feather on your Mac. It installs `~/Applications/Feather.app`, adds its icon to your Desktop, and opens it. No prebuilt app download or Apple developer account needed.
 
-The first build takes a few minutes. macOS/Homebrew may ask you to install Command Line Tools or enter your password. Rerun the same command to update after quitting Feather.
+The first build takes a few minutes. macOS/Homebrew may ask you to install Command Line Tools or enter your password.
 
 The `feather` command is installed in `~/.local/bin`; add that folder to your PATH if needed. Standard LaTeX packages are prepared during installation. For additional packages, run `tectonic your-paper.tex` once.
+
+## Update
+
+Quit Feather, then run in macOS Terminal:
+
+```bash
+~/.local/bin/feather update
+```
+
+Or rerun the install command above. Both pull the latest source, rebuild, replace the old app, and reopen Feather. Your files and settings stay intact. With `~/.local/bin` on PATH, use `feather update`.
 
 [Manual builds, testing, and Windows/Linux setup →](docs/DEVELOPMENT.md)

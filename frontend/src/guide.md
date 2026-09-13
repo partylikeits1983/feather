@@ -153,3 +153,13 @@ Resize the sidebar and editor/preview split by dragging their dividers. Zoom cha
 | Zoom in / out / reset | ⌘+ / ⌘− / ⌘0 | Ctrl++ / Ctrl+− / Ctrl+0 |
 
 The keyboard button, or **Features → Keyboard shortcuts**, opens the quick reference.
+
+## Updating Feather
+
+On macOS, quit Feather and run this in the macOS Terminal app:
+
+```bash
+~/.local/bin/feather update
+```
+
+With the command on your PATH, `feather update` works too. Rerunning the install command from the README also updates Feather. Both pull the latest source, rebuild, replace the previous app, and reopen it. Your documents, scratchpad, and settings are kept. Updates stop if the cached source has local changes. Windows and Linux currently use a manual source build.

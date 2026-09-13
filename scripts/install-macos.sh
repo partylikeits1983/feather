@@ -17,6 +17,14 @@ feather_temp="$(mktemp -d "${TMPDIR:-/tmp}/feather-install.XXXXXX")"
 cleanup() { rm -rf "$feather_temp"; [[ -z "$feather_stage" ]] || rm -rf "$feather_stage"; }
 trap cleanup EXIT
 
+require_closed_app() {
+  if ps -axo command= | /usr/bin/grep -F "$feather_app/Contents/MacOS/feather-desktop" | /usr/bin/grep -v grep >/dev/null; then
+    fail 'Quit Feather, then run feather update from the macOS Terminal app. Your files and settings will be kept.'
+  fi
+}
+# Check before downloading/building, and again immediately before replacement.
+require_closed_app
+
 # Homebrew's official installer also installs Apple's command line tools.
 if ! command -v brew >/dev/null 2>&1; then
   if [[ -x /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)";
@@ -51,6 +59,9 @@ if [[ -e "$feather_source" ]]; then
   [[ -z "$(git -C "$feather_source" status --porcelain)" ]] || fail "Source has local edits; keeping them safe. Commit or move them before rerunning: $feather_source"
   [[ "$(git -C "$feather_source" branch --show-current)" == main ]] || fail "Source is on a different branch. Switch it to main before rerunning: $feather_source"
   git -C "$feather_source" fetch origin main
+  # Refuse local-only commits as well as dirty files; never install a merge
+  # or an unexpected local version when the user asks for the latest upstream.
+  git -C "$feather_source" merge-base --is-ancestor HEAD origin/main || fail "Source has local-only commits or diverged history; keeping it untouched: $feather_source"
   git -C "$feather_source" merge --ff-only origin/main
 else
   mkdir -p "$(dirname "$feather_source")"
@@ -74,12 +85,10 @@ if ! tectonic --outdir "$feather_temp" examples/paper.tex; then
 fi
 
 step 'Installing the app and command.'
+require_closed_app
 if [[ -e "$feather_app" || -L "$feather_app" ]]; then
   [[ ! -L "$feather_app" ]] || fail "App destination is a symlink; keeping it untouched: $feather_app"
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$feather_app/Contents/Info.plist" 2>/dev/null || true)" == app.feather.editor ]] || fail "Another app already occupies $feather_app"
-  if ps -axo command= | /usr/bin/grep -F "$feather_app/Contents/MacOS/feather-desktop" | /usr/bin/grep -v grep >/dev/null; then
-    fail 'Quit the installed Feather app, then rerun to finish updating. Your source build is cached.'
-  fi
 fi
 if [[ -e "$feather_bin/feather" || -L "$feather_bin/feather" ]]; then
   [[ "$("$feather_bin/feather" --version 2>/dev/null || true)" == feather\ * ]] || fail "Another command already occupies $feather_bin/feather"
@@ -97,6 +106,7 @@ if [[ ! -e "$feather_desktop/Feather.app" && ! -L "$feather_desktop/Feather.app"
   ln -s "$feather_app" "$feather_desktop/Feather.app"
 fi
 printf '\nInstalled: %s\nDesktop shortcut: %s\nCommand: %s\n' "$feather_app" "$feather_desktop/Feather.app" "$feather_bin/feather"
+printf 'Next time: quit Feather and run feather update from Terminal.\n'
 case ":$PATH:" in
   *":$feather_bin:"*) ;;
   *) printf 'To use feather from any terminal, add this to your shell profile:\n  export PATH="%s:$PATH"\n' "$feather_bin" ;;

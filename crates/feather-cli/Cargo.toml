@@ -7,3 +7,6 @@ license.workspace = true
 [[bin]]
 name = "feather"
 path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"

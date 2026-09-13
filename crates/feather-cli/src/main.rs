@@ -16,12 +16,18 @@ fn main() -> ExitCode {
 fn launch() -> Result<(), String> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     if args.iter().any(|s| s == "--help" || s == "-h") {
-        println!("Feather — a quiet Markdown editor\n\nUsage: feather [FILE | FOLDER]\n\n  feather .\n  feather notes.md\n  feather ~/research\n\nSet FEATHER_BIN to override the desktop executable.");
+        println!("Feather — a quiet Markdown editor\n\nUsage: feather [FILE | FOLDER]\n       feather update\n\n  feather .\n  feather notes.md\n  feather ~/research\n\n  feather update    Build and reinstall the latest source (macOS).\n                    Quit Feather first; run from Terminal.\n\nSet FEATHER_BIN to override the desktop executable.");
         return Ok(());
     }
     if args.iter().any(|s| s == "--version" || s == "-V") {
         println!("feather {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
+    }
+    if args.first().is_some_and(|arg| arg == "update") {
+        if args.len() != 1 {
+            return Err("Usage: feather update (no additional arguments)".into());
+        }
+        return update();
     }
     if args.len() > 1 {
         return Err("Expected one file or folder. Run feather --help.".into());
@@ -66,4 +72,22 @@ fn launch() -> Result<(), String> {
             )
         })?;
     Ok(())
+}
+
+fn update() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::process::CommandExt;
+        // Replace this process: the installer can then replace the CLI binary too.
+        let error = Command::new("/bin/bash")
+            .arg("-c")
+            .arg(include_str!("../../../scripts/update-macos.sh"))
+            .exec();
+        Err(format!("Could not start the updater: {error}"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err(
+        "feather update currently supports macOS. See docs/DEVELOPMENT.md for other platforms."
+            .into(),
+    )
 }
