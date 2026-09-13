@@ -99,7 +99,7 @@ pub fn run() {
             )?)?;
             menu.append(&file)?;
             menu.append(&edit)?;
-            menu.append(&Submenu::with_items(
+            let view = Submenu::with_items(
                 app,
                 "View",
                 true,
@@ -110,7 +110,10 @@ pub fn run() {
                     true,
                     Some("CmdOrCtrl+J"),
                 )?],
-            )?)?;
+            )?;
+            #[cfg(target_os = "macos")]
+            view.append(&PredefinedMenuItem::fullscreen(app, None)?)?;
+            menu.append(&view)?;
             let features = Submenu::new(app, "Features", true)?;
             features.append(&MenuItem::with_id(
                 app,

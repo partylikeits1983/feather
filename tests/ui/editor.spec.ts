@@ -72,3 +72,37 @@ test('Vim toggle preserves text, Escape returns to Normal, navigation and insert
   await source.focus(); await page.keyboard.type('ordinary typing');
   await expect(source).toContainText('ordinary typing');
 });
+
+test('Vim owns Escape in Insert, Visual and Normal modes while Zen remains active', async ({ page }) => {
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('first line\nsecond line');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Vim mode' }).check();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  await source.focus(); await page.keyboard.press('Meta+j');
+  const escape = () => source.evaluate(element => {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true });
+    element.dispatchEvent(event); return event.defaultPrevented;
+  });
+  await page.keyboard.type('ggiadded ');
+  await expect(page.getByText('--INSERT--', { exact: true })).toBeVisible();
+  expect(await escape()).toBe(true);
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  await page.keyboard.type('v');
+  await expect(page.getByText('--VISUAL--', { exact: true })).toBeVisible();
+  expect(await escape()).toBe(true);
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  // An extra Escape in Normal must not fall through to macOS fullscreen exit.
+  expect(await escape()).toBe(true);
+  expect(await escape()).toBe(true);
+  await expect(page.locator('.app-header')).toBeHidden();
+  await expect(source).toContainText('added first line');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Vim mode' }).uncheck();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await expect(page.getByText('--NORMAL--', { exact: true })).toHaveCount(0);
+  await source.focus();
+  expect(await escape()).toBe(false);
+});

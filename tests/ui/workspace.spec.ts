@@ -404,3 +404,31 @@ test('Native Features menu works without a workspace and remains available in Ze
   await expect(source).toContainText('# My scratch notes');
   await expect(page.locator('.document-title strong')).toHaveText('Scratchpad.md');
 });
+
+test('Vim Escape remains local to the editable diff while dialogs and Bash keep Escape', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Vim mode' }).check();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await page.getByRole('button', { name: 'Git diff', exact: true }).click();
+  const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
+  await expect(page.locator('.cm-merge-b')).toContainText('--NORMAL--');
+  await current.focus(); await page.keyboard.press('Meta+j');
+  await page.keyboard.type('ggiDiff '); await page.keyboard.press('Escape');
+  await expect(page.locator('.cm-merge-b')).toContainText('--NORMAL--');
+  const prevented = await current.evaluate(element => {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true });
+    element.dispatchEvent(event); return event.defaultPrevented;
+  });
+  expect(prevented).toBe(true);
+  await expect(current).toContainText('Diff # My notes');
+  await selectNativeMenu(page, 'shortcuts');
+  await expect(page.getByRole('dialog', { name: 'A few useful shortcuts' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('Control+Backquote');
+  await expect(page.getByLabel('Bash terminal input')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { terminalInput: string } }).testWorkspace.terminalInput)).toBe('\u001b');
+  await expect(page.locator('.app-header')).toBeHidden();
+});

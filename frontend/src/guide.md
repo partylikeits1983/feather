@@ -109,6 +109,8 @@ Enable **Settings → Vim mode** for modal navigation:
 
 Vim can be toggled off without losing your document or undo history.
 
+In Zen mode and macOS fullscreen, **Esc** returns to Normal mode and stays in the editor, even when pressed again. Use **i** to insert text or **v** to select it. **⌘J** toggles Zen; **Ctrl+Command+F**, or **View → Toggle Full Screen**, controls fullscreen separately.
+
 ## Git diff and terminal
 
 **Git diff** compares the active file with its Git `HEAD` version. Removed lines are highlighted red on the left; added lines are green on the right.
@@ -146,6 +148,7 @@ Resize the sidebar and editor/preview split by dragging their dividers. Zoom cha
 | Toggle sidebar | ⌘B | Ctrl+B |
 | Toggle preview | ⌘\ | Ctrl+\ |
 | Toggle Zen mode | ⌘J | Ctrl+J |
+| Toggle fullscreen | ⌃⌘F | — |
 | Toggle terminal | Ctrl + backtick | Ctrl + backtick |
 | Zoom in / out / reset | ⌘+ / ⌘− / ⌘0 | Ctrl++ / Ctrl+− / Ctrl+0 |
 
