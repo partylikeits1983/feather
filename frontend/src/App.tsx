@@ -295,7 +295,7 @@ export function App() {
 
   return <div class={`app ${zen ? 'zen' : ''} ${locked ? 'busy' : ''}`}>
     <header class="app-header">
-      <div class="brand" style={{ width: sidebar ? sidebarWidth : 168 }}><span class="brand-mark"><Icon name="feather" size={24} /></span><span>feather</span><span class="version">0.1</span></div>
+      <div class="brand" style={{ width: sidebar ? sidebarWidth : 168 }}><span class="brand-mark"><Icon name="feather" size={20} /></span><span>feather</span><span class="version">0.1</span></div>
       <div class="header-center"><span class="workspace-dot" /><span>{workspace?.name || 'A quiet place for your thoughts'}</span></div>
       <div class="header-actions">{button('sidebar', `Toggle sidebar (${modifier}B)`, () => setSidebar(!sidebar), sidebar)}<span class="toolbar-separator" />{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}{button('keyboard', 'Keyboard shortcuts', () => setShortcuts(true))}</div>
     </header>

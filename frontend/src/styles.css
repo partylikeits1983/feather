@@ -17,10 +17,10 @@ kbd { font-family: var(--sans); font-size: 10px; letter-spacing: .03em; color: v
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 .app { height: 100%; display: flex; flex-direction: column; }
-.app-header { height: 64px; flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--surface); padding-right: 20px; user-select: none; }
-.brand { display: flex; gap: 8px; align-items: center; padding-left: 24px; flex: none; font-family: Georgia, 'Times New Roman', serif; font-size: 26px; letter-spacing: -.9px; }
+.app-header { height: 48px; flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: var(--surface); padding-right: 20px; user-select: none; }
+.brand { display: flex; gap: 7px; align-items: center; padding-left: 24px; flex: none; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; letter-spacing: -.7px; }
 .brand-mark { color: var(--accent); transform: rotate(5deg); display: inline-flex; }
-.version { font-family: var(--sans); font-size: 9px; letter-spacing: .03em; color: var(--muted); align-self: center; margin: 7px 0 0 3px; }
+.version { font-family: var(--sans); font-size: 9px; letter-spacing: .03em; color: var(--muted); align-self: center; margin: 5px 0 0 3px; }
 .header-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; color: var(--muted); letter-spacing: .015em; padding-right: 48px; min-width: 0; }
 .header-center>span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-dot, .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: inline-block; flex: none; opacity: .75; }
