@@ -380,7 +380,7 @@ test('Zen shortcut leaves Undo and Redo intact in source and diff, and works thr
   await expect(page.locator('.app-header')).toBeVisible();
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'A few useful shortcuts' });
-  await expect(dialog.locator('.shortcut-list > div').filter({ hasText: 'Toggle Zen mode' })).toContainText('⌘ J');
+  await expect(dialog.locator('.shortcut-list > div').filter({ hasText: 'Toggle Zen mode' })).toContainText(process.platform === 'darwin' ? '⌘ J' : 'Ctrl J');
   await expect(dialog).not.toContainText('Stay with your words.');
 });
 
