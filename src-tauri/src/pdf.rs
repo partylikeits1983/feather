@@ -152,7 +152,7 @@ fn render_native(webview: tauri::webview::PlatformWebview, path: PathBuf, send: 
     settings.set("output-uri", Some(uri.as_str()));
     operation.set_print_settings(&settings);
     let page = gtk::PageSetup::new();
-    page.set_paper_size(&gtk::PaperSize::new("iso_a4"));
+    page.set_paper_size(&gtk::PaperSize::new(Some("iso_a4")));
     page.set_left_margin(20.0, gtk::Unit::Mm);
     page.set_right_margin(20.0, gtk::Unit::Mm);
     page.set_top_margin(18.0, gtk::Unit::Mm);
