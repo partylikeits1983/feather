@@ -108,9 +108,40 @@ pub fn run() {
                     "zen",
                     "Toggle Zen Mode",
                     true,
-                    Some("CmdOrCtrl+Shift+Enter"),
+                    Some("CmdOrCtrl+J"),
                 )?],
             )?)?;
+            let features = Submenu::new(app, "Features", true)?;
+            features.append(&MenuItem::with_id(
+                app,
+                "guide",
+                "Feature Guide",
+                true,
+                None::<&str>,
+            )?)?;
+            features.append(&PredefinedMenuItem::separator(app)?)?;
+            // Keep the native menu's topics in sync with the built-in guide.
+            for topic in include_str!("../../frontend/src/guide.md")
+                .lines()
+                .filter_map(|line| line.strip_prefix("## "))
+            {
+                features.append(&MenuItem::with_id(
+                    app,
+                    format!("guide:{topic}"),
+                    topic,
+                    true,
+                    None::<&str>,
+                )?)?;
+            }
+            features.append(&PredefinedMenuItem::separator(app)?)?;
+            features.append(&MenuItem::with_id(
+                app,
+                "shortcuts",
+                "Keyboard Shortcuts",
+                true,
+                None::<&str>,
+            )?)?;
+            menu.append(&features)?;
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let _ = app.emit("menu-action", event.id().as_ref());

@@ -4,7 +4,6 @@ import { api, desktop } from './api';
 import { DocumentSession } from './state/document';
 import { welcome } from './welcome';
 import guideText from './guide.md?raw';
-import { FeatureMenu } from './components/FeatureMenu';
 import { basename, dirname, isText, resolveRelative, type Appearance, type Entry, type Workspace } from './types';
 import { Editor } from './editor/Editor';
 import { Preview, TexPreview, type PreviewHandle } from './preview/Preview';
@@ -143,7 +142,7 @@ export function App() {
     });
   }
 
-  const callbacks = useRef({ requested, choose, close, openFile, toggleZen }); callbacks.current = { requested, choose, close, openFile, toggleZen };
+  const callbacks = useRef({ requested, choose, close, openFile, toggleZen, openGuide }); callbacks.current = { requested, choose, close, openFile, toggleZen, openGuide };
   useEffect(() => {
     if (!desktop) return;
     let cancelled = false; const offs: (() => void)[] = []; let timer: ReturnType<typeof setTimeout>;
@@ -169,10 +168,13 @@ export function App() {
         }, 180);
       }));
       addOff(await listen<string>('menu-action', event => {
+        if (event.payload.startsWith('guide:')) { callbacks.current.openGuide(event.payload.slice(6)); return; }
         switch (event.payload) {
           case 'open-file': callbacks.current.choose(false); break;
           case 'open-folder': callbacks.current.choose(true); break;
           case 'new-file': begin({ kind: 'file', path: '' }); break;
+          case 'guide': callbacks.current.openGuide(); break;
+          case 'shortcuts': setShortcuts(true); break;
           case 'zen': callbacks.current.toggleZen(); break;
           case 'save': void current.current.flush().catch(report); break;
           case 'install-cli': void api.install().then(setNotice).catch(report); break;
@@ -189,8 +191,8 @@ export function App() {
   useEffect(() => {
     // Capture before CodeMirror/Vim/xterm can interpret the reserved Zen shortcut.
     const zenShortcut = (event: KeyboardEvent) => {
-      if (!(modifier === '⌘' ? event.metaKey : event.ctrlKey) || event.altKey || !event.shiftKey || event.isComposing) return;
-      if (event.key !== 'Enter') return;
+      if (!(modifier === '⌘' ? event.metaKey : event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing) return;
+      if (event.code !== 'KeyJ' && event.key.toLowerCase() !== 'j') return;
       event.preventDefault(); event.stopImmediatePropagation();
       if (!event.repeat) callbacks.current.toggleZen();
     };
@@ -295,7 +297,7 @@ export function App() {
     <header class="app-header">
       <div class="brand" style={{ width: sidebar ? sidebarWidth : 168 }}><span class="brand-mark"><Icon name="feather" size={24} /></span><span>feather</span><span class="version">0.1</span></div>
       <div class="header-center"><span class="workspace-dot" /><span>{workspace?.name || 'A quiet place for your thoughts'}</span></div>
-      <div class="header-actions">{button('sidebar', `Toggle sidebar (${modifier}B)`, () => setSidebar(!sidebar), sidebar)}<span class="toolbar-separator" />{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}{button('keyboard', 'Keyboard shortcuts', () => setShortcuts(true))}<FeatureMenu zen={zen} onOpen={openGuide} onShortcuts={() => setShortcuts(true)} /></div>
+      <div class="header-actions">{button('sidebar', `Toggle sidebar (${modifier}B)`, () => setSidebar(!sidebar), sidebar)}<span class="toolbar-separator" />{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}{button('keyboard', 'Keyboard shortcuts', () => setShortcuts(true))}</div>
     </header>
     <div class="app-body">
       {sidebar && <><aside class="sidebar" style={{ width: sidebarWidth }}>
@@ -306,7 +308,7 @@ export function App() {
       </aside><div class="resize-handle sidebar-resize" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" tabIndex={0} aria-valuenow={sidebarWidth} aria-valuemin={180} aria-valuemax={380} onPointerDown={event => resize(event, 'sidebar')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSidebarWidth(n => Math.max(180, Math.min(380, n + (event.key === 'ArrowLeft' ? -10 : 10)))); }} /></>}
       <main class="main">
         <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{tex ? 'T' : 'M'}</span><strong>{basename(session.path)}</strong>{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isLocal && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
-          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}<FeatureMenu zen={zen} onOpen={openGuide} onShortcuts={() => setShortcuts(true)} /></>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}<button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), mode === 'source')}{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</div></div>
+          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}<button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), mode === 'source')}{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</div></div>
         </div>
         {(error || status === 'error' || status === 'conflict') && <div class="error-banner" role="alert"><span>{error || session.error.replace('CONFLICT: ', '')}</span>{status === 'conflict' && <><button onClick={() => { if (workspace) void api.read(workspace.id, session.path).then(setDisk).catch(report); }}>Review disk</button><button onClick={() => begin({ kind: 'copy', path: dirname(session.path) })}>Save a copy</button></>}{status === 'error' && <button onClick={() => void session.flush().catch(report)}>Retry save</button>}{error && <button class="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><Icon name="close" size={14} /></button>}</div>}
         <div class={`panes mode-${mode}`} ref={panes}>
@@ -326,7 +328,7 @@ export function App() {
     {deleteEntry && <Dialog title="Move to trash?" onClose={() => setDeleteEntry(null)}><p class="dialog-description">“{deleteEntry.name}”{deleteEntry.isDir ? ' and everything inside it' : ''} will move to your system trash.</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => setDeleteEntry(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { if (!workspace) return; await api.trash(workspace.id, deleteEntry.path); if (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/')) attach(scratch.current!); setDeleteEntry(null); setRevision(n => n + 1); })}>Move to trash</button></div></Dialog>}
     {disk && <Dialog title="This file has two versions" class="conflict-dialog" onClose={() => setDisk(null)}><p class="dialog-description">Your text is preserved. Compare it with the version on disk before choosing what to save.</p><div class="conflict-columns"><div><h3>Your edits</h3><pre>{session.text}</pre></div><div><h3>On disk</h3><pre>{disk.contents}</pre></div></div><div class="dialog-buttons"><button class="secondary-button" onClick={() => { session.reload(disk.contents, disk.version); setDisk(null); setError(''); }}>Use disk version</button><button class="primary-button" onClick={() => { session.version = disk.version; session.status = 'modified'; void session.flush().then(() => { setDisk(null); setError(''); }).catch(report); }}>Save my version</button></div></Dialog>}
     {quick && <Dialog title="Find a file" class="quick-dialog" onClose={() => setQuick(false)}><div class="quick-input"><Icon name="search" size={18} /><input autoFocus aria-label="Find a file" placeholder="Type a file name…" value={query} onInput={event => setQuery(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setQuickIndex(n => Math.max(0, Math.min(results.length - 1, n + (event.key === 'ArrowDown' ? 1 : -1)))); } if (event.key === 'Enter' && results[quickIndex]) { openFile(results[quickIndex]); setQuick(false); } }} /><kbd>esc</kbd></div><div class="quick-results" role="listbox" aria-label="Matching files">{results.map((path, index) => <button role="option" aria-selected={quickIndex === index} class={quickIndex === index ? 'highlighted' : ''} onClick={() => { openFile(path); setQuick(false); }}><Icon name="file" /><span>{basename(path)}<small>{dirname(path) || workspace?.name}</small></span><Icon name="arrow" size={14} /></button>)}{!results.length && <p>{workspace ? 'No matching files.' : 'Open a folder to find your documents.'}</p>}</div>{truncated && <p class="quick-hint">Showing the first 200 matches within 50,000 entries. Narrow your search.</p>}</Dialog>}
-    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New Markdown file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} ⇧ Enter`], ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
+    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New Markdown file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} J`], ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
     {notice && <div class="toast" role="status"><Icon name="check" size={16} /><span>{notice}</span><button class="icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><Icon name="close" size={14} /></button></div>}
   </div>;
 }

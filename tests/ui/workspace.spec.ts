@@ -1,7 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 const paper = readFileSync(new URL('../fixtures/paper.pdf', import.meta.url)).toString('base64');
 const mathExample = readFileSync(new URL('../fixtures/from-codes-to-proofs.md', import.meta.url), 'utf8');
+
+async function selectNativeMenu(page: Page, action: string) {
+  await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
+}
 
 // Exercise the desktop UI through the IPC boundary. Actual disk semantics are
 // covered by feather-core integration tests; this transport is a test fixture.
@@ -316,12 +320,12 @@ test('UI profiles recolor the editor and diff, with green additions and red dele
   await expect(page.locator('.app-header')).toHaveCSS('background-color', 'rgb(13, 17, 23)');
 });
 
-test('Features opens the guide, jumps to examples, exports, and returns to the saved document', async ({ page }) => {
+test('Native Features menu opens the guide, jumps to examples, exports, and returns to the saved document', async ({ page }) => {
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.fill('# Notes before the guide');
-  await page.getByRole('button', { name: 'Features', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Feature guide', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Features', exact: true })).toHaveCount(0);
+  await selectNativeMenu(page, 'guide');
   await expect(page.getByRole('heading', { name: 'Feather feature guide', exact: true })).toBeInViewport();
   await expect(page.locator('.document-title strong')).toHaveText('Feather Guide.md');
   await expect(source).toHaveAttribute('aria-readonly', 'true');
@@ -329,13 +333,11 @@ test('Features opens the guide, jumps to examples, exports, and returns to the s
   await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { files: Record<string, { contents: string }> } }).testWorkspace.files['notes.md'].contents)).toBe('# Notes before the guide');
   await expect(page.locator('.katex-error')).toHaveCount(0);
   await expect(page.locator('.markdown-body .katex')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Features', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'LaTeX and PDF', exact: true }).click();
+  await selectNativeMenu(page, 'guide:LaTeX and PDF');
   await expect(page.getByRole('heading', { name: 'LaTeX and PDF', exact: true })).toBeInViewport();
   await page.screenshot({ path: 'artifacts/feather-feature-guide.png' });
   await page.getByRole('button', { name: 'Source view', exact: true }).click();
-  await page.getByRole('button', { name: 'Features', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Saving and exporting', exact: true }).click();
+  await selectNativeMenu(page, 'guide:Saving and exporting');
   await expect(page.getByRole('heading', { name: 'Saving and exporting', exact: true })).toBeInViewport();
   await page.getByRole('button', { name: 'Export PDF', exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { exported: string } }).testWorkspace.exported)).toContain('Feather feature guide');
@@ -354,27 +356,51 @@ test('Zen shortcut leaves Undo and Redo intact in source and diff, and works thr
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.type('Added ');
-  await page.keyboard.press('Meta+Shift+Enter');
+  await page.keyboard.press('Meta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(source).toContainText('Added # My notes');
-  await source.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', metaKey: true, shiftKey: true, repeat: true });
+  await source.dispatchEvent('keydown', { key: 'j', code: 'KeyJ', metaKey: true, repeat: true });
   await expect(page.locator('.app-header')).toBeHidden();
   await page.keyboard.press('Meta+z');
   await expect(source).not.toContainText('Added');
   await expect(page.locator('.app-header')).toBeHidden();
   await page.keyboard.press('Meta+Shift+z');
   await expect(source).toContainText('Added # My notes');
-  await page.keyboard.press('Meta+Shift+Enter');
+  await page.keyboard.press('Meta+j');
   await expect(page.locator('.app-header')).toBeVisible();
   await page.getByRole('button', { name: 'Git diff', exact: true }).click();
   const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
-  await current.focus(); await page.keyboard.press('Meta+Shift+Enter');
+  await current.focus(); await page.keyboard.press('Meta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(current).toContainText('Added # My notes');
   await page.evaluate(() => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', 'zen'));
   await expect(page.locator('.app-header')).toBeVisible();
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'A few useful shortcuts' });
-  await expect(dialog.locator('.shortcut-list > div').filter({ hasText: 'Toggle Zen mode' })).toContainText('⇧ Enter');
+  await expect(dialog.locator('.shortcut-list > div').filter({ hasText: 'Toggle Zen mode' })).toContainText('⌘ J');
   await expect(dialog).not.toContainText('Stay with your words.');
+});
+
+test('Native Features menu works without a workspace and remains available in Zen mode', async ({ page }) => {
+  await page.addInitScript(() => {
+    const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    const invoke = internals.invoke;
+    internals.invoke = (command, args) => command === 'open_requested' ? Promise.resolve(null) : invoke(command, args);
+  });
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# My scratch notes');
+  await selectNativeMenu(page, 'guide:Markdown and math');
+  await expect(page.getByRole('heading', { name: 'Markdown and math', exact: true })).toBeInViewport();
+  await page.keyboard.press('Meta+j');
+  await expect(page.locator('.app-header')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Features', exact: true })).toHaveCount(0);
+  await selectNativeMenu(page, 'shortcuts');
+  await expect(page.getByRole('dialog', { name: 'A few useful shortcuts' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await selectNativeMenu(page, 'guide:Appearance and shortcuts');
+  await expect(page.getByRole('heading', { name: 'Appearance and shortcuts', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: 'Back', exact: false }).click();
+  await expect(source).toContainText('# My scratch notes');
+  await expect(page.locator('.document-title strong')).toHaveText('Scratchpad.md');
 });

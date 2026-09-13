@@ -72,23 +72,3 @@ test('Vim toggle preserves text, Escape returns to Normal, navigation and insert
   await source.focus(); await page.keyboard.type('ordinary typing');
   await expect(source).toContainText('ordinary typing');
 });
-
-test('Features is keyboard accessible without a workspace, including in Zen mode', async ({ page }) => {
-  await page.goto('/');
-  const source = page.getByRole('textbox', { name: 'Markdown source' });
-  await source.fill('# My scratch notes');
-  await page.getByRole('button', { name: 'Features', exact: true }).focus();
-  await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menuitem', { name: 'Feature guide', exact: true })).toBeFocused();
-  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Markdown and math', exact: true })).toBeInViewport();
-  await page.keyboard.press('Meta+Shift+Enter');
-  await expect(page.locator('.app-header')).toBeHidden();
-  await page.getByRole('button', { name: 'Features', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Keyboard shortcuts', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'A few useful shortcuts' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Back', exact: false }).click();
-  await expect(source).toContainText('# My scratch notes');
-  await expect(page.locator('.document-title strong')).toHaveText('Scratchpad.md');
-});

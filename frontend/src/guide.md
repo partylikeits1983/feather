@@ -2,7 +2,7 @@
 
 Feather is a minimal, local editor for Markdown and LaTeX. Open a folder, write, and see the result alongside your source.
 
-This guide is a Markdown document rendered by Feather. Choose a topic from **Features**, or scroll through the examples. **Back** returns to your previous document.
+This guide is a Markdown document rendered by Feather. Choose a topic from **Features** in the native menu bar at the top of the screen on macOS, or scroll through the examples. **Back** returns to your previous document.
 
 ## Markdown and math
 
@@ -132,7 +132,7 @@ These commands run only when you enter them. Hiding the terminal keeps the shell
 
 Resize the sidebar and editor/preview split by dragging their dividers. Zoom changes the whole interface. Appearance, profile, Vim, Zen, and zoom settings persist between launches.
 
-**Zen mode** hides the header, sidebar, and pane labels. Toggle it with **Command+Shift+Enter** on macOS, or **Ctrl+Shift+Enter** elsewhere. The compact toolbar keeps Settings, Features, and an Exit Zen mode control available.
+**Zen mode** hides the header, sidebar, and pane labels. Toggle it with **Command+J** on macOS, or **Ctrl+J** elsewhere. The compact toolbar keeps Settings and an Exit Zen mode control available. Features remains in the native menu bar.
 
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
@@ -145,7 +145,7 @@ Resize the sidebar and editor/preview split by dragging their dividers. Zoom cha
 | Find in document | ⌘F | Ctrl+F |
 | Toggle sidebar | ⌘B | Ctrl+B |
 | Toggle preview | ⌘\ | Ctrl+\ |
-| Toggle Zen mode | ⌘⇧Enter | Ctrl+Shift+Enter |
+| Toggle Zen mode | ⌘J | Ctrl+J |
 | Toggle terminal | Ctrl + backtick | Ctrl + backtick |
 | Zoom in / out / reset | ⌘+ / ⌘− / ⌘0 | Ctrl++ / Ctrl+− / Ctrl+0 |
 
