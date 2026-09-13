@@ -81,7 +81,7 @@ test('Vim owns Escape in Insert, Visual and Normal modes while Zen remains activ
   await page.getByRole('switch', { name: 'Vim mode' }).check();
   await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
   await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
-  await source.focus(); await page.keyboard.press('Meta+j');
+  await source.focus(); await page.keyboard.press('ControlOrMeta+j');
   const escape = () => source.evaluate(element => {
     const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, cancelable: true });
     element.dispatchEvent(event); return event.defaultPrevented;

@@ -108,7 +108,7 @@ test('on-demand Git diff, terminal in document directory, zoom, and Markdown PDF
   expect(await page.evaluate(() => (window as unknown as { testWorkspace: { terminalDirectory: string } }).testWorkspace.terminalDirectory)).toBe('');
   await page.keyboard.press('Control+Backquote');
   await expect(page.getByRole('region', { name: 'Bash terminal', exact: true })).toBeHidden();
-  await page.keyboard.press('Meta+=');
+  await page.keyboard.press('ControlOrMeta+=');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Reset zoom' })).toHaveText('110%');
   await page.getByRole('button', { name: 'Reset zoom' }).click();
@@ -158,7 +158,7 @@ test('diff undo survives appearance changes and Vim uses the current document', 
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
-  await current.focus(); await page.keyboard.press('Meta+z');
+  await current.focus(); await page.keyboard.press('ControlOrMeta+z');
   await expect(current).not.toContainText('Added');
   await expect(current).toContainText('My notes');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -269,7 +269,7 @@ test('Zen mode persists, preserves writing, and keeps settings and an exit avail
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(page.locator('.sidebar')).toBeHidden();
   await expect(source).toContainText('Before zen # My notes');
-  await source.focus(); await page.keyboard.press('Meta+z');
+  await source.focus(); await page.keyboard.press('ControlOrMeta+z');
   await expect(source).not.toContainText('Before zen');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
@@ -310,7 +310,7 @@ test('UI profiles recolor the editor and diff, with green additions and red dele
   await expect(page.locator('.cm-merge-b .cm-changedLine').first()).toHaveCSS('background-color', 'rgb(218, 251, 225)');
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
-  await current.focus(); await page.keyboard.press('Meta+z');
+  await current.focus(); await page.keyboard.press('ControlOrMeta+z');
   await expect(current).not.toContainText('My edit');
   await expect(current).toContainText('My notes');
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
@@ -356,21 +356,24 @@ test('Zen shortcut leaves Undo and Redo intact in source and diff, and works thr
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.type('Added ');
-  await page.keyboard.press('Meta+j');
+  await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(source).toContainText('Added # My notes');
-  await source.dispatchEvent('keydown', { key: 'j', code: 'KeyJ', metaKey: true, repeat: true });
+  await source.dispatchEvent('keydown', {
+    key: 'j', code: 'KeyJ', repeat: true,
+    metaKey: process.platform === 'darwin', ctrlKey: process.platform !== 'darwin',
+  });
   await expect(page.locator('.app-header')).toBeHidden();
-  await page.keyboard.press('Meta+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect(source).not.toContainText('Added');
   await expect(page.locator('.app-header')).toBeHidden();
-  await page.keyboard.press('Meta+Shift+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(source).toContainText('Added # My notes');
-  await page.keyboard.press('Meta+j');
+  await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeVisible();
   await page.getByRole('button', { name: 'Git diff', exact: true }).click();
   const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
-  await current.focus(); await page.keyboard.press('Meta+j');
+  await current.focus(); await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(current).toContainText('Added # My notes');
   await page.evaluate(() => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', 'zen'));
@@ -392,7 +395,7 @@ test('Native Features menu works without a workspace and remains available in Ze
   await source.fill('# My scratch notes');
   await selectNativeMenu(page, 'guide:Markdown and math');
   await expect(page.getByRole('heading', { name: 'Markdown and math', exact: true })).toBeInViewport();
-  await page.keyboard.press('Meta+j');
+  await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Features', exact: true })).toHaveCount(0);
   await selectNativeMenu(page, 'shortcuts');
@@ -413,7 +416,7 @@ test('Vim Escape remains local to the editable diff while dialogs and Bash keep 
   await page.getByRole('button', { name: 'Git diff', exact: true }).click();
   const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
   await expect(page.locator('.cm-merge-b')).toContainText('--NORMAL--');
-  await current.focus(); await page.keyboard.press('Meta+j');
+  await current.focus(); await page.keyboard.press('ControlOrMeta+j');
   await page.keyboard.type('ggiDiff '); await page.keyboard.press('Escape');
   await expect(page.locator('.cm-merge-b')).toContainText('--NORMAL--');
   const prevented = await current.evaluate(element => {
