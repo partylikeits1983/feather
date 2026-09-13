@@ -11,6 +11,7 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 ## Features
 
 - Live Markdown, math, and LaTeX/PDF preview.
+- Built-in Rust, TypeScript, Python, and Lean code highlighting; unknown languages use C.
 - Autosave, file explorer, and quick open.
 - Feather, GitHub, and Midnight profiles; light/dark themes and Zen mode.
 - Resizable panes and interface zoom.

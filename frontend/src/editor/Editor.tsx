@@ -9,6 +9,8 @@ import { tags } from '@lezer/highlight';
 import type { DocumentSession } from '../state/document';
 import { syncDocument } from './sync';
 import { configureVim } from './vim';
+import { fencedLanguage } from '../syntax/languages';
+import { codeHighlighter } from '../syntax/highlighter';
 
 const colors = HighlightStyle.define([
   { tag: tags.heading, color: 'var(--accent)', fontWeight: '600' },
@@ -39,7 +41,7 @@ const theme = EditorView.theme({
 
 export function editingExtensions() {
   return [lineNumbers(), history(), drawSelection(), highlightActiveLine(), highlightActiveLineGutter(), bracketMatching(), highlightSelectionMatches(),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), markdown(), syntaxHighlighting(colors), theme, EditorView.lineWrapping];
+    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), markdown({ codeLanguages: fencedLanguage }), syntaxHighlighting(colors), syntaxHighlighting(codeHighlighter), theme, EditorView.lineWrapping];
 }
 
 export function Editor({ session, dark, locked, vimEnabled, onView, onScroll }: { session: DocumentSession; dark: boolean; locked: boolean; vimEnabled: boolean; onView: (view: EditorView | null) => void; onScroll: (line: number) => void }) {

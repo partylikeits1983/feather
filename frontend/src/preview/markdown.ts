@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeStringify from 'rehype-stringify';
 import { visit } from 'unist-util-visit';
 import type { Root, Element } from 'hast';
+import { highlightCodeBlocks } from '../syntax/highlight';
 
 export const PREVIEW_LIMIT = 180_000;
 
@@ -87,7 +88,7 @@ function prepareHtml() {
 }
 
 const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
-  .use(remarkRehype).use(prepareHtml).use(rehypeKatex, { trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20 })
+  .use(remarkRehype).use(prepareHtml).use(highlightCodeBlocks).use(rehypeKatex, { trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20 })
   .use(rehypeStringify);
 
 export async function renderMarkdown(source: string, limit = PREVIEW_LIMIT) {

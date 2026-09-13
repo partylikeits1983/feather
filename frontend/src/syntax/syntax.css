@@ -1,0 +1,46 @@
+:root {
+  --syntax-keyword: #a04455; --syntax-type: #28618a; --syntax-function: #7751a3;
+  --syntax-string: #426b35; --syntax-number: #965c20; --syntax-comment: #747b6c;
+  --syntax-operator: #50554c; --syntax-meta: #886122; --syntax-property: #876039;
+  --syntax-variable: #30342d;
+}
+[data-theme='dark'] {
+  --syntax-keyword: #e695a3; --syntax-type: #8fc5dd; --syntax-function: #c4a8e6;
+  --syntax-string: #a8c98c; --syntax-number: #e8be87; --syntax-comment: #899480;
+  --syntax-operator: #b8bfb0; --syntax-meta: #e2bd76; --syntax-property: #dbb394;
+  --syntax-variable: #e1e5d8;
+}
+[data-profile='github'] {
+  --syntax-keyword: #cf222e; --syntax-type: #0550ae; --syntax-function: #8250df;
+  --syntax-string: #0a3069; --syntax-number: #0550ae; --syntax-comment: #6e7781;
+  --syntax-operator: #cf222e; --syntax-meta: #953800; --syntax-property: #953800;
+  --syntax-variable: #1f2328;
+}
+[data-profile='github'][data-theme='dark'] {
+  --syntax-keyword: #ff7b72; --syntax-type: #79c0ff; --syntax-function: #d2a8ff;
+  --syntax-string: #a5d6ff; --syntax-number: #79c0ff; --syntax-comment: #8b949e;
+  --syntax-operator: #ff7b72; --syntax-meta: #ffa657; --syntax-property: #ffa657;
+  --syntax-variable: #e6edf3;
+}
+[data-profile='midnight'] {
+  --syntax-keyword: #9c3e67; --syntax-type: #25698b; --syntax-function: #6553b3;
+  --syntax-string: #427346; --syntax-number: #965e28; --syntax-comment: #6c7394;
+  --syntax-operator: #4c5270; --syntax-meta: #986a3a; --syntax-property: #8c5a3a;
+  --syntax-variable: #282d43;
+}
+[data-profile='midnight'][data-theme='dark'] {
+  --syntax-keyword: #f09cac; --syntax-type: #8dcced; --syntax-function: #c6b3ff;
+  --syntax-string: #a8d5a1; --syntax-number: #efc68d; --syntax-comment: #8d96b6;
+  --syntax-operator: #bdc3dc; --syntax-meta: #e3b782; --syntax-property: #ebba9a;
+  --syntax-variable: #e2e5f3;
+}
+.syntax-keyword { color: var(--syntax-keyword); }
+.syntax-type { color: var(--syntax-type); }
+.syntax-function { color: var(--syntax-function); }
+.syntax-string { color: var(--syntax-string); }
+.syntax-number { color: var(--syntax-number); }
+.syntax-comment { color: var(--syntax-comment); }
+.syntax-operator { color: var(--syntax-operator); }
+.syntax-meta { color: var(--syntax-meta); }
+.syntax-property { color: var(--syntax-property); }
+.syntax-variable { color: var(--syntax-variable); }

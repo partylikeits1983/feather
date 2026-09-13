@@ -2,10 +2,54 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 const paper = readFileSync(new URL('../fixtures/paper.pdf', import.meta.url)).toString('base64');
 const mathExample = readFileSync(new URL('../fixtures/from-codes-to-proofs.md', import.meta.url), 'utf8');
+const codeExample = [
+  '```rust\nfn square(x: i32) -> i32 { x * x }\n```',
+  '```typescript\nconst name: string = "Feather";\n```',
+  '```python\ndef square(x: int):\n    return x * x\n```',
+  '```lean\ntheorem refl (α : Nat) : α = α := by rfl\n```',
+  '```somelang\nint square(int x) { return x * x; }\n```',
+].join('\n\n');
 
 async function selectNativeMenu(page: Page, action: string) {
   await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
 }
+
+test('built-in code highlighting works in source, worker preview, diff, themes, and PDF export', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill(codeExample);
+  for (const language of ['rust', 'typescript', 'python', 'lean', 'c']) {
+    await expect(page.locator(`.markdown-body pre[data-code-language="${language}"] .syntax-keyword`).first()).toBeVisible();
+  }
+  const editorKeyword = source.locator('.syntax-keyword').filter({ hasText: /^fn$/ }).first();
+  const previewKeyword = page.locator('pre[data-code-language="rust"] .syntax-keyword').first();
+  await expect(editorKeyword).toBeVisible();
+  await expect(previewKeyword).toHaveCSS('color', await editorKeyword.evaluate(element => getComputedStyle(element).color));
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('combobox', { name: 'UI profile' }).selectOption('github');
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await expect(editorKeyword).toHaveCSS('color', 'rgb(255, 123, 114)');
+  await expect(previewKeyword).toHaveCSS('color', 'rgb(255, 123, 114)');
+  await page.screenshot({ path: 'artifacts/feather-syntax-dark.png' });
+  await page.getByRole('button', { name: 'Export PDF', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { exported: string } }).testWorkspace.exported)).toContain('data-code-language="c"');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { exported: string } }).testWorkspace.exported)).toContain('syntax-keyword');
+  await page.getByRole('button', { name: 'Git diff', exact: true }).click();
+  const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
+  await expect(current.locator('.syntax-keyword').filter({ hasText: /^fn$/ }).first()).toBeVisible();
+  await current.fill('```somelang\nint main() { return 42; }\n```');
+  await expect(current.locator('.syntax-type').first()).toHaveText('int');
+  await page.getByRole('button', { name: 'Split view', exact: true }).click();
+  await expect(page.locator('pre[data-code-language="c"] .syntax-number')).toHaveText('42');
+  await source.fill('```text\nint main() { return 42; }\n```');
+  await expect(page.locator('.markdown-body .syntax-keyword')).toHaveCount(0);
+  await expect(source.locator('.syntax-keyword')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
 
 // Exercise the desktop UI through the IPC boundary. Actual disk semantics are
 // covered by feather-core integration tests; this transport is a test fixture.

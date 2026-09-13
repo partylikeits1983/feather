@@ -93,6 +93,8 @@ If Feather is already running, the command opens the requested document or works
 
 The editor supports undo/redo, search, multiple selections, syntax highlighting, line numbers, bracket matching, and line wrapping.
 
+Fenced code blocks support Rust (`rust`, `rs`), TypeScript (`typescript`, `ts`, `tsx`), Python (`python`, `py`), Lean (`lean`, `lean4`), JavaScript, and C. Colours follow your UI profile in both panes and Git diff. PDF exports keep highlighting with a light palette. Unknown language labels use C highlighting; unlabelled blocks and `text` stay plain. The language rules ship with Feather and load only when needed. Lean highlighting covers syntax; it does not check proofs.
+
 Enable **Settings → Vim mode** for modal navigation:
 
 | Key | Action |

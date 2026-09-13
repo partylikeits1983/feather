@@ -29,4 +29,41 @@ The sum of the first $n$ positive integers is
 \sum_{k=1}^{n} k = \frac{n(n+1)}{2}.
 \]
 
+\section{A derivative}
+The derivative measures the slope of the graph:
+\[
+p'(x) = 2 + 6x, \qquad p'(2) = 14.
+\]
+The second derivative is $p''(x) = 6$, so the graph curves upward everywhere.
+
+\section{An integral}
+An antiderivative is
+\[
+\int p(x)\,dx = x + x^2 + x^3 + C.
+\]
+Since $p(x)$ is positive on $[0,1]$, the area under its graph on this interval is
+\begin{align*}
+\int_0^1 p(x)\,dx
+  &= \left[x + x^2 + x^3\right]_0^1 \\
+  &= (1 + 1 + 1) - 0 = 3.
+\end{align*}
+
+\section{Evaluation as a matrix}
+Evaluating at three points can be written as one matrix multiplication:
+\[
+\begin{pmatrix}
+p(0) \\ p(1) \\ p(2)
+\end{pmatrix}
+=
+\begin{pmatrix}
+1 & 0 & 0 \\
+1 & 1 & 1 \\
+1 & 2 & 4
+\end{pmatrix}
+\begin{pmatrix} 1 \\ 2 \\ 3 \end{pmatrix}
+=
+\begin{pmatrix} 1 \\ 6 \\ 17 \end{pmatrix}.
+\]
+Each row evaluates the same coefficient vector at a different input.
+
 \end{document}

@@ -59,6 +59,7 @@ The **Features** menu in the native application menu bar (at the top of the scre
 - Open a file or folder. Directories expand on demand; quick open searches only when requested.
 - Edit Markdown with syntax highlighting, line numbers, undo/redo, search, multiple selections, and line wrapping.
 - Preview GFM tables, task lists, local images, links, and KaTeX mathematics. `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, aligned equations, and fenced `math` are supported.
+- Code fences use the same on-demand language parsers in CodeMirror and the preview worker: Rust, TypeScript/TSX, JavaScript/JSX, Python, Lean 4, and C. Unknown labels fall back to C; unlabelled blocks and explicit `text` stay plain. Syntax colours follow the UI profile and carry into PDF export using a light palette. Lean uses a lightweight lexical tokenizer with nested comments and Unicode identifiers, without a language server or proof checking. The worker caches unchanged snippets with bounded memory.
 - Files autosave after 500 ms idle. Switching files/workspaces and closing through the window or app menu flush pending writes. Failed saves keep the editor open.
 - Outside edits reload clean documents. Dirty conflicts keep your text and offer side-by-side review, explicit overwrite, or save a copy. Deletion uses the system trash.
 - Drag the pane dividers, switch source/split/preview mode, or double-click a rendered block to jump to its source. The chain button toggles source-position scroll synchronization.
