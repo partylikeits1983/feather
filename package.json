@@ -1,0 +1,52 @@
+{
+  "name": "feather",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "desktop": "tauri dev",
+    "bundle": "tauri build",
+    "test": "vitest run",
+    "test:ui": "playwright test",
+    "bench:preview": "tsx benchmarks/preview.ts",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-markdown": "^6.3.3",
+    "@codemirror/language": "^6.11.0",
+    "@codemirror/merge": "^6.12.2",
+    "@codemirror/search": "^6.5.10",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.5",
+    "@lezer/highlight": "^1.2.1",
+    "@replit/codemirror-vim": "^6.4.0",
+    "@tauri-apps/api": "^2.5.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "katex": "^0.16.22",
+    "pdfjs-dist": "^6.3.289",
+    "preact": "^10.26.5",
+    "rehype-katex": "^7.0.1",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1",
+    "@preact/preset-vite": "^2.10.1",
+    "@tauri-apps/cli": "^2.5.0",
+    "@types/hast": "^3.0.4",
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.0",
+    "vitest": "^4.1.11"
+  }
+}

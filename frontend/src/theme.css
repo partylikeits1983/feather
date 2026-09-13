@@ -1,0 +1,108 @@
+:root {
+  color-scheme: light;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --surface: #fbfaf7;
+  --panel: #f4f3ee;
+  --editor: #fcfbf8;
+  --preview: #fffefb;
+  --text: #30342d;
+  --text-secondary: #50554c;
+  --muted: #888c80;
+  --faint: #a8aa9f;
+  --line-number: #b7b9ad;
+  --border: #e5e6dd;
+  --accent: #687c52;
+  --accent-hover: #586b44;
+  --accent-soft: #e9eddf;
+  --accent-border: #bac7a7;
+  --on-accent: #fffefa;
+  --hover: #777f6010;
+  --selection: #dce5cf;
+  --active-line: #888d7010;
+  --code: #a47c55;
+  --code-bg: #f1f2eb;
+  --scrollbar: #c1c4b77a;
+  --danger: #ab5750;
+  --danger-bg: #f9eeea;
+  --shadow: 0 10px 45px #20251616, 0 2px 7px #20251608;
+  --diff-delete-line: #f9e9e6;
+  --diff-add-line: #edf4e5;
+  --diff-delete-text: #eec7bf;
+  --diff-add-text: #cbe0ba;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #20231f;
+  --panel: #1b1e1a;
+  --editor: #20231f;
+  --preview: #232620;
+  --text: #e1e5d8;
+  --text-secondary: #b8bfb0;
+  --muted: #7f8977;
+  --faint: #69725f;
+  --line-number: #555f4d;
+  --border: #32382d;
+  --accent: #a8bd8e;
+  --accent-hover: #bdcea9;
+  --accent-soft: #323d29;
+  --accent-border: #576a43;
+  --on-accent: #1d2418;
+  --hover: #aabc8b10;
+  --selection: #414f35;
+  --active-line: #aabc8b08;
+  --code: #c4a27d;
+  --code-bg: #2b3026;
+  --scrollbar: #626e5366;
+  --danger: #e39788;
+  --danger-bg: #382b26;
+  --shadow: 0 10px 45px #00000035, 0 2px 7px #00000015;
+  --diff-delete-line: #3b2927;
+  --diff-add-line: #2b3823;
+  --diff-delete-text: #643b35;
+  --diff-add-text: #435b34;
+}
+
+/* Profiles change the whole interface, including CodeMirror and previews. */
+[data-profile='github'] {
+  --surface: #ffffff; --panel: #f6f8fa; --editor: #ffffff; --preview: #ffffff;
+  --text: #1f2328; --text-secondary: #424a53; --muted: #656d76; --faint: #8c959f;
+  --line-number: #8c959f; --border: #d0d7de; --accent: #0969da; --accent-hover: #0550ae;
+  --accent-soft: #ddf4ff; --accent-border: #54aeff; --on-accent: #ffffff;
+  --hover: #afb8c126; --selection: #b6e3ff; --active-line: #f6f8fa;
+  --code: #953800; --code-bg: #eff1f3; --scrollbar: #8c959f66;
+  --danger: #cf222e; --danger-bg: #ffebe9; --shadow: 0 8px 24px #8c959f33;
+  --diff-delete-line: #ffebe9; --diff-add-line: #dafbe1;
+  --diff-delete-text: #ffcecb; --diff-add-text: #aceebb;
+}
+[data-profile='github'][data-theme='dark'] {
+  --surface: #0d1117; --panel: #010409; --editor: #0d1117; --preview: #0d1117;
+  --text: #e6edf3; --text-secondary: #c9d1d9; --muted: #8b949e; --faint: #6e7681;
+  --line-number: #6e7681; --border: #30363d; --accent: #58a6ff; --accent-hover: #79c0ff;
+  --accent-soft: #1c2d41; --accent-border: #1f6feb; --on-accent: #0d1117;
+  --hover: #b1bac41a; --selection: #264f78; --active-line: #161b22;
+  --code: #ffa657; --code-bg: #161b22; --scrollbar: #6e768166;
+  --danger: #ff7b72; --danger-bg: #3d1b20; --shadow: 0 8px 24px #01040980;
+  --diff-delete-line: #3d1b20; --diff-add-line: #122f21;
+  --diff-delete-text: #7a2832; --diff-add-text: #1c5b36;
+}
+[data-profile='midnight'] {
+  --surface: #f8f9fd; --panel: #eef0f8; --editor: #fafbff; --preview: #ffffff;
+  --text: #282d43; --text-secondary: #4c5270; --muted: #6c7394; --faint: #8c92ac;
+  --line-number: #979db5; --border: #dce0ee; --accent: #6553b3; --accent-hover: #514093;
+  --accent-soft: #e9e5fa; --accent-border: #b8aae2; --on-accent: #ffffff;
+  --hover: #6553b310; --selection: #dcd5f5; --active-line: #eef0f8;
+  --code: #986a3a; --code-bg: #eef0f8; --scrollbar: #8c92ac66;
+  --danger: #b64d61; --danger-bg: #fce8ee; --shadow: 0 8px 24px #282d4320;
+}
+[data-profile='midnight'][data-theme='dark'] {
+  --surface: #171923; --panel: #12141d; --editor: #171923; --preview: #1a1d29;
+  --text: #e2e5f3; --text-secondary: #bdc3dc; --muted: #8d96b6; --faint: #6f7999;
+  --line-number: #636d8c; --border: #2e3449; --accent: #b5a3f5; --accent-hover: #cfbfff;
+  --accent-soft: #332b4f; --accent-border: #6d579f; --on-accent: #171923;
+  --hover: #b5a3f510; --selection: #443c65; --active-line: #202435;
+  --code: #e3b782; --code-bg: #24293b; --scrollbar: #6f799966;
+  --danger: #f09cac; --danger-bg: #412735; --shadow: 0 8px 24px #07091170;
+  --diff-delete-line: #422835; --diff-add-line: #20382d;
+  --diff-delete-text: #703749; --diff-add-text: #365a43;
+}

@@ -1,0 +1,9 @@
+[package]
+name = "feather-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "feather"
+path = "src/main.rs"

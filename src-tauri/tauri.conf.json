@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Feather", "version": "0.1.0", "identifier": "app.feather.editor",
+  "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://127.0.0.1:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": {
+    "windows": [{ "label": "main", "title": "Feather", "width": 1380, "height": 900, "minWidth": 760, "minHeight": 480, "backgroundColor": "#f9f8f5" }],
+    "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src ipc: http://ipc.localhost; worker-src 'self' blob:; object-src blob:; frame-src blob:; base-uri 'none'; form-action 'none'" }
+  },
+  "bundle": {
+    "active": true, "targets": "all", "category": "Productivity", "shortDescription": "A quiet place for Markdown and mathematics.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "fileAssociations": [{ "ext": ["md", "markdown", "mdown", "tex"], "name": "Text document", "role": "Editor" }],
+    "macOS": { "minimumSystemVersion": "11.0" }
+  }
+}

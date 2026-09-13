@@ -1,0 +1,74 @@
+import { test, expect } from '@playwright/test';
+
+test('scratchpad, live math, themes, views, shortcuts, and persistence', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'A little room to think.' })).toBeVisible();
+  await expect(page.locator('.katex')).toHaveCount(2);
+  await page.screenshot({ path: 'artifacts/feather-light.png' });
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# A new thought\n\nInline $x^2$ and a [link](https://example.com).\n\n$$\nf(x) = x + 1\n$$');
+  await expect(page.getByRole('heading', { name: 'A new thought' })).toBeVisible();
+  await expect(page.locator('.katex')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await page.getByRole('button', { name: 'Preview view', exact: true }).click();
+  await expect(page.locator('.source-pane')).toBeHidden();
+  await page.getByRole('button', { name: 'Source view', exact: true }).click();
+  await expect(page.locator('.preview-pane')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Split view', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'A new thought' })).toBeVisible();
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toContain('A new thought');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'A new thought' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(errors).toEqual([]);
+});
+
+test('dark welcome, resizing, and source jump', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' }); await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'A little room to think.' })).toBeVisible();
+  await page.screenshot({ path: 'artifacts/feather-dark.png' });
+  const separator = page.getByRole('separator', { name: 'Resize editor and preview' });
+  await separator.focus(); await page.keyboard.press('ArrowLeft');
+  await expect(separator).toHaveAttribute('aria-valuenow', '48');
+  await page.getByRole('heading', { name: 'Just you and your words' }).dblclick();
+  await expect(page.getByRole('textbox', { name: 'Markdown source' })).toBeFocused();
+});
+
+test('Vim toggle preserves text, Escape returns to Normal, navigation and insert work', async ({ page }) => {
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('first line\nsecond line\nthird line');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Vim mode' }).check();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  await source.focus();
+  await page.keyboard.type('ggji');
+  await expect(page.getByText('--INSERT--', { exact: true })).toBeVisible();
+  await page.keyboard.type('inserted ');
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  await expect(source).toContainText('inserted second line');
+  await page.keyboard.type('dd');
+  await expect(source).not.toContainText('second line');
+  await page.keyboard.type('u');
+  await expect(source).toContainText('inserted second line');
+  await page.keyboard.type(':w'); await page.keyboard.press('Enter');
+  await page.reload();
+  await expect(page.getByText('--NORMAL--', { exact: true })).toBeVisible();
+  await expect(source).toContainText('inserted second line');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Vim mode' }).uncheck();
+  await page.locator('.popover-dismiss').click({ position: { x: 20, y: 200 } });
+  await expect(page.getByText('--NORMAL--', { exact: true })).toHaveCount(0);
+  await source.focus(); await page.keyboard.type('ordinary typing');
+  await expect(source).toContainText('ordinary typing');
+});
