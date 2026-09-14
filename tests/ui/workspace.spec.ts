@@ -11,6 +11,12 @@ const codeExample = [
 ].join('\n\n');
 
 async function selectNativeMenu(page: Page, action: string) {
+  // The scratchpad can render before the asynchronous native listeners attach.
+  await expect.poll(() => page.evaluate(() => {
+    const state = (window as unknown as { testWorkspace: { requested: boolean; listeners: Map<string, number>; callbacks: Map<number, unknown> } }).testWorkspace;
+    const listener = state.listeners.get('menu-action');
+    return state.requested && listener !== undefined && state.callbacks.has(listener) && !document.querySelector('.app.busy');
+  })).toBe(true);
   await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
 }
 
@@ -55,7 +61,7 @@ test('standalone code highlights, autosaves, and keeps its language in the diff'
   await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Find a file/ }).click();
   await page.getByRole('textbox', { name: 'Find a file', exact: true }).fill('main.rs');
-  await page.getByRole('option').first().click();
+  await page.getByRole('option', { name: 'main.rs research', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Rust source' })).toContainText('42');
   await page.screenshot({ path: 'artifacts/feather-code-editor.png' });
   expect(errors).toEqual([]);
@@ -164,7 +170,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(({ paper }) => {
     const state = {
       files: { 'notes.md': { contents: '# My notes\n\n[Proof](./proof.md)', version: '1' }, 'proof.md': { contents: '# The proof\n\n$x^2$', version: '1' }, 'paper.tex': { contents: '\\documentclass{article}\n\\begin{document}A small observation\\end{document}', version: '1' } } as Record<string, { contents: string; version: string }>,
-      dirs: new Set<string>(), callbacks: new Map<number, (event: unknown) => void>(), listeners: new Map<string, number>(), counter: 0, compileFailure: false, terminalInput: '', terminalDirectory: '', exported: '',
+      dirs: new Set<string>(), callbacks: new Map<number, (event: unknown) => void>(), listeners: new Map<string, number>(), counter: 0, requested: false, compileFailure: false, terminalInput: '', terminalDirectory: '', exported: '',
       emit(event: string, payload: unknown) { this.callbacks.get(this.listeners.get(event)!)?.({ event, payload, id: 1 }); },
     };
     Object.assign(window, {
@@ -177,7 +183,10 @@ test.beforeEach(async ({ page }) => {
           if (command === 'plugin:event|listen') { state.listeners.set(String(args.event), Number(args.handler)); return 1; }
           if (command.startsWith('plugin:')) return;
           const path = String(args.path || '');
-          if (command === 'open_requested' || command === 'choose_workspace') return { id: 1, name: 'research', root: '/research', selected: 'notes.md', watchWarning: null };
+          if (command === 'open_requested' || command === 'choose_workspace') {
+            if (command === 'open_requested') state.requested = true;
+            return { id: 1, name: 'research', root: '/research', selected: 'notes.md', watchWarning: null };
+          }
           if (command === 'list_directory') return [...Object.keys(state.files), ...state.dirs].filter(p => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '') === path).map(p => ({ path: p, name: p.split('/').pop(), isDir: state.dirs.has(p) }));
           if (command === 'search_files') return { paths: Object.keys(state.files).filter(p => p.includes(String(args.query))), truncated: false };
           if (command === 'compile_tex') return state.compileFailure ? { pdf: null, log: 'Undefined control sequence: invalid' } : { pdf: paper, log: 'Compiled successfully.' };
@@ -206,7 +215,7 @@ test('open, autosave, follow a link, quick open, create, rename and trash', asyn
   await expect(page.getByRole('heading', { name: 'The proof' })).toBeVisible();
   await page.getByRole('button', { name: /Find a file/ }).click();
   await page.getByRole('textbox', { name: 'Find a file', exact: true }).fill('notes');
-  await page.getByRole('option').first().click();
+  await page.getByRole('option', { name: 'notes.md research', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Edited notes' })).toBeVisible();
   await page.getByRole('button', { name: 'New file', exact: true }).click();
   await page.getByLabel('File name').fill('thought.md'); await page.getByRole('button', { name: 'Create', exact: true }).click();
@@ -558,7 +567,7 @@ test('Zen shortcut leaves Undo and Redo intact in source and diff, and works thr
   await current.focus(); await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeHidden();
   await expect(current).toContainText('Added # My notes');
-  await page.evaluate(() => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', 'zen'));
+  await selectNativeMenu(page, 'zen');
   await expect(page.locator('.app-header')).toBeVisible();
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'A few useful shortcuts' });
@@ -570,7 +579,7 @@ test('Native Features menu works without a workspace and remains available in Ze
   await page.addInitScript(() => {
     const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
     const invoke = internals.invoke;
-    internals.invoke = (command, args) => command === 'open_requested' ? Promise.resolve(null) : invoke(command, args);
+    internals.invoke = (command, args) => command === 'open_requested' ? invoke(command, args).then(() => null) : invoke(command, args);
   });
   await page.goto('/');
   const source = page.getByRole('textbox', { name: 'Markdown source' });
