@@ -147,7 +147,7 @@ cargo bench -p feather-core --bench filesystem
 npm run bench:preview
 ```
 
-The UI tests exercise a real browser and an explicit mocked IPC transport; Rust integration tests exercise actual temporary files. CI is configured to build on macOS, Windows, and Linux. macOS is the locally tested native platform; the other platform jobs have not been run remotely.
+The UI tests exercise a real browser and an explicit mocked IPC transport; Rust integration tests exercise actual temporary files. CI builds and tests on macOS, Windows, and Linux. Browser regression tests run in Chromium on Windows and Chromium plus WebKit on macOS/Linux, covering the engines used by Tauri. macOS is also tested locally as a native application.
 
 The architecture and build sequence are in [PLAN.md](../PLAN.md). Framework references: [Tauri](https://v2.tauri.app/start/), [single-instance support](https://v2.tauri.app/plugin/single-instance/), [remark-math / rehype-katex](https://github.com/remarkjs/remark-math).
 

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, keymap } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentWithTab, redo } from '@codemirror/commands';
 import { bracketMatching, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
@@ -41,7 +41,7 @@ const theme = EditorView.theme({
 
 export function editingExtensions() {
   return [lineNumbers(), history(), drawSelection(), highlightActiveLine(), highlightActiveLineGutter(), bracketMatching(), highlightSelectionMatches(),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), syntaxHighlighting(colors), syntaxHighlighting(codeHighlighter), theme, EditorView.lineWrapping];
+    keymap.of([...defaultKeymap, { key: 'Mod-Shift-z', run: redo, preventDefault: true }, ...historyKeymap, ...searchKeymap, indentWithTab]), syntaxHighlighting(colors), syntaxHighlighting(codeHighlighter), theme, EditorView.lineWrapping];
 }
 
 export function Editor({ session, dark, locked, vimEnabled, onView }: { session: DocumentSession; dark: boolean; locked: boolean; vimEnabled: boolean; onView: (view: EditorView | null) => void }) {

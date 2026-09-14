@@ -133,7 +133,7 @@ export function App() {
   function openGuide(section = '') {
     setSettings(false);
     void transition(async () => {
-      const line = section ? Math.max(1, guideText.split('\n').findIndex(text => text === `## ${section}`) + 1) : 1;
+      const line = section ? Math.max(1, guideText.split(/\r?\n/).findIndex(text => text === `## ${section}`) + 1) : 1;
       if (current.current !== guide.current) {
         guideReturn.current = { session: current.current, mode };
         guideLine.current = line; attach(guide.current!);

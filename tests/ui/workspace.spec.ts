@@ -227,11 +227,16 @@ test('open, autosave, follow a link, quick open, create, rename and trash', asyn
 
 test('outside edits preserve dirty text and conflict review can retain my version', async ({ page }) => {
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Markdown source' }).fill('# My pending edits');
-  await page.evaluate(() => {
-    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
-    state.files['notes.md'] = { contents: '# Outside edit', version: '2' }; state.emit('workspace-changed', [1, ['notes.md']]);
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.evaluate(element => {
+    // Inject the outside edit in the input event, before the 500 ms autosave.
+    // A separate browser round trip can lose that race on a busy CI runner.
+    element.addEventListener('input', () => {
+      const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+      state.files['notes.md'] = { contents: '# Outside edit', version: '2' }; state.emit('workspace-changed', [1, ['notes.md']]);
+    }, { once: true });
   });
+  await source.fill('# My pending edits');
   await page.getByRole('button', { name: 'Review disk' }).click();
   await expect(page.getByRole('dialog')).toContainText('# My pending edits');
   await expect(page.getByRole('dialog')).toContainText('# Outside edit');
@@ -330,11 +335,13 @@ test('outside changes preserve dirty edits made in the diff', async ({ page }) =
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   await page.getByRole('button', { name: 'Git diff', exact: true }).click();
   const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
-  await current.fill('# Pending diff edits');
-  await page.evaluate(() => {
-    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
-    state.files['notes.md'] = { contents: '# Outside edit', version: '2' }; state.emit('workspace-changed', [1, ['notes.md']]);
+  await current.evaluate(element => {
+    element.addEventListener('input', () => {
+      const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+      state.files['notes.md'] = { contents: '# Outside edit', version: '2' }; state.emit('workspace-changed', [1, ['notes.md']]);
+    }, { once: true });
   });
+  await current.fill('# Pending diff edits');
   await page.getByRole('button', { name: 'Review disk' }).click();
   await expect(page.getByRole('dialog')).toContainText('# Pending diff edits');
   await expect(page.getByRole('dialog')).toContainText('# Outside edit');
@@ -469,6 +476,30 @@ test('UI profiles recolor the editor and diff, with green additions and red dele
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'UI profile' })).toHaveValue('github');
   await expect(page.locator('.app-header')).toHaveCSS('background-color', 'rgb(13, 17, 23)');
+});
+
+test('guide navigation handles Windows line endings', async ({ page }) => {
+  const guide = readFileSync(new URL('../../frontend/src/guide.md', import.meta.url), 'utf8').replace(/\r?\n/g, '\r\n');
+  let served = false;
+  await page.route(/\/src\/guide\.md\?.*\braw\b/, route => {
+    served = true;
+    return route.fulfill({ contentType: 'text/javascript', body: `export default ${JSON.stringify(guide)};` });
+  });
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  expect(served).toBe(true);
+  await selectNativeMenu(page, 'guide:LaTeX and PDF');
+  await expect(page.getByRole('heading', { name: 'LaTeX and PDF', exact: true })).toBeInViewport();
+  await selectNativeMenu(page, 'guide:Appearance and shortcuts');
+  await expect(page.getByRole('heading', { name: 'Appearance and shortcuts', exact: true })).toBeInViewport();
+});
+
+test('Ctrl Shift Z redoes edits with Windows keybindings', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'Win32' }));
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.type('Added ');
+  await page.keyboard.press('Control+z'); await expect(source).not.toContainText('Added');
+  await page.keyboard.press('Control+Shift+z'); await expect(source).toContainText('Added # My notes');
 });
 
 test('Native Features menu opens the guide, jumps to examples, exports, and returns to the saved document', async ({ page }) => {
