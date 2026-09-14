@@ -24,26 +24,10 @@ pub struct SearchResults {
     pub truncated: bool,
 }
 
-pub fn editable(path: &Path) -> bool {
-    matches!(
-        path.extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase()
-            .as_str(),
-        "md" | "markdown" | "mdown" | "txt" | "tex"
-    )
-}
-
 impl Workspace {
     pub fn open(path: impl AsRef<Path>) -> Result<(Self, Option<String>)> {
         let path = path.as_ref().canonicalize()?;
         let (root, selected) = if path.is_file() {
-            if !editable(&path) {
-                return Err(Error::Message(
-                    "Choose a Markdown, text, or TeX file".into(),
-                ));
-            }
             (
                 path.parent().ok_or(Error::OutsideWorkspace)?.to_path_buf(),
                 Some(path.file_name().unwrap().to_string_lossy().into_owned()),
@@ -150,9 +134,7 @@ impl Workspace {
                     {
                         stack.push(entry.path);
                     }
-                } else if editable(Path::new(&entry.path))
-                    && entry.path.to_lowercase().contains(&query)
-                {
+                } else if entry.path.to_lowercase().contains(&query) {
                     paths.push(entry.path);
                 }
             }

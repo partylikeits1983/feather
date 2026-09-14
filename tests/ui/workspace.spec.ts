@@ -14,6 +14,113 @@ async function selectNativeMenu(page: Page, action: string) {
   await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
 }
 
+test('standalone code highlights, autosaves, and keeps its language in the diff', async ({ page }) => {
+  const files = [
+    ['proof.lean', 'Lean', 'theorem', 'theorem refl (α : Nat) : α = α := by rfl'],
+    ['main.rs', 'Rust', 'fn', 'fn main() { let count = 1; }'],
+    ['app.ts', 'TypeScript', 'const', 'const count: number = 1;'],
+    ['app.tsx', 'TSX', 'const', 'const App = () => <div />;'],
+    ['index.js', 'JavaScript', 'const', 'const count = 1;'],
+    ['index.jsx', 'JSX', 'const', 'const App = () => <div />;'],
+    ['main.c', 'C', 'return', 'int main() { return 0; }'],
+    ['script.py', 'Python', 'def', 'def main():\n    return 1'],
+  ];
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Preview view', exact: true }).click();
+  await page.evaluate(files => {
+    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+    for (const [path, , , contents] of files) state.files[path] = { contents, version: '1' };
+    state.emit('workspace-changed', [1, []]);
+  }, files);
+  for (const [path, language, keyword, contents] of files) {
+    await page.getByRole('treeitem', { name: `· ${path}`, exact: true }).click();
+    const source = page.getByRole('textbox', { name: `${language} source`, exact: true });
+    await expect(source).toBeVisible();
+    await expect(source.locator('.syntax-keyword').filter({ hasText: new RegExp(`^${keyword}$`) }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Document preview' })).toHaveCount(0);
+    await source.fill(contents + '\n');
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  }
+  await page.getByRole('treeitem', { name: '· main.rs', exact: true }).click();
+  await page.getByRole('button', { name: 'Git diff', exact: true }).click();
+  const current = page.getByRole('textbox', { name: 'Current file in Git diff' });
+  await expect(current.locator('.syntax-keyword').filter({ hasText: /^fn$/ })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Git HEAD version' }).locator('.syntax-keyword').filter({ hasText: /^fn$/ })).toBeVisible();
+  await current.fill('fn main() { let count = 42; }\n');
+  await page.getByRole('button', { name: 'Source view', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Rust source' })).toContainText('42');
+  await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Find a file/ }).click();
+  await page.getByRole('textbox', { name: 'Find a file', exact: true }).fill('main.rs');
+  await page.getByRole('option').first().click();
+  await expect(page.getByRole('textbox', { name: 'Rust source' })).toContainText('42');
+  await page.screenshot({ path: 'artifacts/feather-code-editor.png' });
+  expect(errors).toEqual([]);
+});
+
+test('creates and reopens Cargo.toml, env, extensionless, and unfamiliar files as plain text', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  for (const path of ['Cargo.toml', '.env', 'LICENSE', 'custom.unfamiliar']) {
+    await page.getByRole('button', { name: 'New file', exact: true }).click();
+    await page.getByLabel('File name').fill(path);
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const source = page.getByRole('textbox', { name: 'Plain text source' });
+    await expect(source).toBeVisible();
+    await source.fill('# Plain text\nAPP_ENV=development\n');
+    await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toHaveCount(0);
+    await expect(source.locator('.syntax-keyword')).toHaveCount(0);
+    await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+    await page.getByRole('treeitem', { name: `· ${path}`, exact: true }).click();
+    await expect(source).toContainText('APP_ENV=development');
+  }
+});
+
+test('source and Markdown preview scroll continuously in both directions without feedback', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const text = Array.from({ length: 50 }, (_, index) => `## Section ${index}\n\n` + `Paragraph ${index}: ` + 'Words that wrap across several lines in both panes. '.repeat(14) + '\n\n$$x^2 + y^2 = z^2$$').join('\n\n');
+  await page.getByRole('textbox', { name: 'Markdown source' }).fill(text);
+  await expect(page.locator('.markdown-body h2')).toHaveCount(50);
+  const selectors = ['.source-pane .cm-scroller', '.preview-scroll'];
+  await page.getByRole('textbox', { name: 'Markdown source' }).press('ControlOrMeta+Home');
+  await expect.poll(() => page.locator(selectors[0]).evaluate(element => element.scrollTop)).toBeLessThan(30);
+  await page.locator(selectors[0]).evaluate(element => { element.scrollTop = 0; });
+  await expect.poll(() => page.locator(selectors[0]).evaluate(element => element.scrollTop)).toBeLessThan(2);
+  await expect.poll(() => page.locator(selectors[1]).evaluate(element => element.scrollTop)).toBeLessThan(2);
+  for (const side of [0, 1]) {
+    const motion = await page.evaluate(async ({ selectors, side }) => {
+      const panes = selectors.map(selector => document.querySelector<HTMLElement>(selector)!);
+      const source = panes[side], follower = panes[1 - side];
+      source.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+      const start = source.scrollTop;
+      const positions: number[] = [];
+      for (let frame = 0; frame < 40; frame++) {
+        if (frame < 20) source.scrollTop += 5;
+        await new Promise(requestAnimationFrame);
+        positions.push(follower.scrollTop);
+      }
+      return { positions, distance: source.scrollTop - start };
+    }, { selectors, side });
+    const steps = motion.positions.slice(1).map((position, index) => position - motion.positions[index]);
+    expect(steps.filter(step => step > .1).length).toBeGreaterThan(15);
+    expect(Math.min(...steps)).toBeGreaterThanOrEqual(-1);
+    expect(Math.max(...steps)).toBeLessThan(40);
+    expect(motion.distance).toBeCloseTo(100, 0);
+  }
+  // Both document ends line up even though the rendered and source heights differ.
+  await page.locator(selectors[0]).evaluate(element => { element.dispatchEvent(new WheelEvent('wheel')); element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => page.locator(selectors[1]).evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(2);
+  await page.locator(selectors[1]).evaluate(element => { element.dispatchEvent(new WheelEvent('wheel')); element.scrollTop = 0; });
+  await expect.poll(() => page.locator(selectors[0]).evaluate(element => element.scrollTop)).toBeLessThan(2);
+  await page.getByRole('button', { name: 'Synchronize scrolling' }).click();
+  const before = await page.locator(selectors[1]).evaluate(element => element.scrollTop);
+  await page.locator(selectors[0]).evaluate(element => { element.scrollTop = 200; });
+  await expect(page.locator(selectors[0])).toHaveJSProperty('scrollTop', 200);
+  expect(await page.locator(selectors[1]).evaluate(element => element.scrollTop)).toBeCloseTo(before, 0);
+});
+
 test('built-in code highlighting works in source, worker preview, diff, themes, and PDF export', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -74,7 +181,7 @@ test.beforeEach(async ({ page }) => {
           if (command === 'list_directory') return [...Object.keys(state.files), ...state.dirs].filter(p => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '') === path).map(p => ({ path: p, name: p.split('/').pop(), isDir: state.dirs.has(p) }));
           if (command === 'search_files') return { paths: Object.keys(state.files).filter(p => p.includes(String(args.query))), truncated: false };
           if (command === 'compile_tex') return state.compileFailure ? { pdf: null, log: 'Undefined control sequence: invalid' } : { pdf: paper, log: 'Compiled successfully.' };
-          if (command === 'git_baseline') return { contents: '# Original notes\n\nA previous paragraph.', revision: 'a1b2c3d4', isNew: false };
+          if (command === 'git_baseline') return { contents: path.endsWith('.md') ? '# Original notes\n\nA previous paragraph.' : state.files[path]?.contents || '', revision: 'a1b2c3d4', isNew: false };
           if (command === 'terminal_start') { state.terminalDirectory = path; state.emit('terminal-output', [1, Array.from(new TextEncoder().encode('bash$ '))]); return { id: 1, cwd: '/research/' + path }; }
           if (command === 'terminal_write') { state.terminalInput += args.data; return; }
           if (command === 'export_markdown') { state.exported = String(args.html); return '/research/notes.pdf'; }

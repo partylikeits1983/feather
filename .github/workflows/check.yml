@@ -32,9 +32,14 @@ jobs:
         if: runner.os == 'macOS'
         run: python3 -m unittest discover -s scripts/tests -v
       - run: npx tauri build --no-bundle
-      - name: Browser smoke tests
-        if: runner.os == 'Linux'
-        run: npx playwright install --with-deps chromium && npm run test:ui
+      - name: Install Windows browser
+        if: runner.os == 'Windows'
+        run: npx playwright install chromium
+      - name: Install Chromium and WebKit
+        if: runner.os != 'Windows'
+        run: npx playwright install --with-deps chromium webkit
+      - name: Browser regression tests
+        run: npm run test:ui
       - name: Upload desktop executable
         uses: actions/upload-artifact@v4
         with:

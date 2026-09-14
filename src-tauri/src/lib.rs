@@ -41,13 +41,8 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+Shift+O"),
             )?;
-            let new_file = MenuItem::with_id(
-                app,
-                "new-file",
-                "New Markdown File…",
-                true,
-                Some("CmdOrCtrl+N"),
-            )?;
+            let new_file =
+                MenuItem::with_id(app, "new-file", "New File…", true, Some("CmdOrCtrl+N"))?;
             let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
             let install = MenuItem::with_id(
                 app,

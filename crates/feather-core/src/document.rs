@@ -31,18 +31,23 @@ fn read_bytes(path: &std::path::Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn text_contents(bytes: &[u8]) -> Result<&str> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|_| Error::Message("This file is not UTF-8 text".into()))?;
+    if text.contains('\0') {
+        return Err(Error::Message(
+            "This binary file cannot be edited as text".into(),
+        ));
+    }
+    Ok(text)
+}
+
 impl Workspace {
     pub fn read(&self, relative: &str) -> Result<Document> {
         let path = self.resolve(relative)?;
-        if !crate::workspace::editable(&path) {
-            return Err(Error::Message(
-                "This file is not a supported text document".into(),
-            ));
-        }
         let bytes = read_bytes(&path)?;
         let version = fingerprint(&bytes);
-        let contents = String::from_utf8(bytes)
-            .map_err(|_| Error::Message("This file is not UTF-8 text".into()))?;
+        let contents = text_contents(&bytes)?;
         Ok(Document {
             path: relative.into(),
             contents: contents
@@ -66,6 +71,8 @@ impl Workspace {
         if fingerprint(&old) != expected_version {
             return Err(Error::Conflict);
         }
+        text_contents(&old)?;
+        text_contents(contents.as_bytes())?;
         let crlf = old.windows(2).any(|w| w == b"\r\n");
         let normalized = contents.replace("\r\n", "\n");
         let mut data = if crlf {

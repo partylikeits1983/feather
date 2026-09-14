@@ -1,6 +1,6 @@
 # Feather development guide
 
-A quiet, local editor for Markdown and mathematics. Rust + Tauri 2, Preact, CodeMirror 6, and a Markdown/KaTeX worker. One folder, one document, one live preview.
+A quiet, local editor for text, code, Markdown, and mathematics. Rust + Tauri 2, Preact, CodeMirror 6, and a Markdown/KaTeX worker. One folder, one document, one live preview.
 
 ## Run
 
@@ -57,12 +57,13 @@ For a custom installation, reuse the same `FEATHER_SOURCE_DIR`, `FEATHER_APPLICA
 The **Features** menu in the native application menu bar (at the top of the screen on macOS) opens the built-in `Feather Guide.md` with a complete feature list, rendered math, a LaTeX example, and export instructions. Select a topic to jump to its section. It preserves your current document and workspace; **Back** returns to your file.
 
 - Open a file or folder. Directories expand on demand; quick open searches only when requested.
-- Edit Markdown with syntax highlighting, line numbers, undo/redo, search, multiple selections, and line wrapping.
+- Open any UTF-8 text file regardless of its extension, including `Cargo.toml`, `.env`, and extensionless files. Lean, Rust, TypeScript/TSX, JavaScript/JSX, C, and Python files select bundled highlighting automatically; other files remain plain text. Binary and non-UTF-8 contents are rejected before editing.
+- Edit text with syntax highlighting, line numbers, undo/redo, search, multiple selections, and line wrapping.
 - Preview GFM tables, task lists, local images, links, and KaTeX mathematics. `$…$`, `$$…$$`, `\(…\)`, `\[…\]`, aligned equations, and fenced `math` are supported.
 - Code fences use the same on-demand language parsers in CodeMirror and the preview worker: Rust, TypeScript/TSX, JavaScript/JSX, Python, Lean 4, and C. Unknown labels fall back to C; unlabelled blocks and explicit `text` stay plain. Syntax colours follow the UI profile and carry into PDF export using a light palette. Lean uses a lightweight lexical tokenizer with nested comments and Unicode identifiers, without a language server or proof checking. The worker caches unchanged snippets with bounded memory.
 - Files autosave after 500 ms idle. Switching files/workspaces and closing through the window or app menu flush pending writes. Failed saves keep the editor open.
 - Outside edits reload clean documents. Dirty conflicts keep your text and offer side-by-side review, explicit overwrite, or save a copy. Deletion uses the system trash.
-- Drag the pane dividers, switch source/split/preview mode, or double-click a rendered block to jump to its source. The chain button toggles source-position scroll synchronization.
+- Drag the pane dividers, switch source/split/preview mode, or double-click a rendered block to jump to its source. The chain button toggles smooth Markdown scroll synchronization: source blocks define a continuous pixel mapping in both directions, with eased following and matching document ends. Code and plain text use the source editor.
 - Settings offers Feather, GitHub, and Midnight UI profiles, each with System (default), Light, and Dark appearance. Profiles apply instantly to the editor, preview, explorer, diff, and terminal, and persist locally.
 - **⌘J** (Ctrl+J on Windows/Linux) toggles **Zen mode**, which hides the header, sidebar, and pane labels. Settings and an Exit Zen mode button stay available in the compact document toolbar. Toggling Zen preserves edits and undo history.
 - Click the workspace heading to collapse or expand the entire tree; expanded subfolders are preserved.
@@ -71,7 +72,7 @@ The **Features** menu in the native application menu bar (at the top of the scre
 - **Git diff** compares the current document, including unsaved edits, with its `HEAD` version. The current-file pane is editable, with autosave, undo/redo, search, and your Vim setting. Edits stay synchronized with the main editor. The HEAD pane is read-only. Additions/deletions update as you type, with previous/next change controls and Refresh. Git is called only when this view opens or refreshes; editing does not stage, commit, or push.
 - **Ctrl+`** opens a minimal Bash terminal in the active document's directory (workspace root for the scratchpad). Hide it with the same shortcut; the shell continues running. Stop Shell ends it. Switching documents does not change an already running shell's directory. Windows requires Git Bash; macOS/Linux use `/bin/bash`. The shell has your normal user permissions, including whatever repository access your Git configuration provides.
 - **⌘+ / ⌘− / ⌘0** (Ctrl on Windows/Linux) zoom the entire interface in/out/reset. Zoom persists across launches and is also adjustable in Settings.
-- **Export PDF** opens a native save dialog and writes a PDF directly. Markdown exports include the complete document, equations, and local images in an A4 layout; no print window or printer selection appears. TeX exports compile the current text and save the resulting PDF. The live preview length cap does not apply to export. Existing destination files are replaced atomically only after generation succeeds.
+- **Export PDF**, available only for `.md` and `.tex`, opens a native save dialog and writes a PDF directly. Markdown exports include the complete document, equations, and local images in an A4 layout; no print window or printer selection appears. TeX exports compile the current text and save the resulting PDF. The live preview length cap does not apply to export. Existing destination files are replaced atomically only after generation succeeds.
 
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |

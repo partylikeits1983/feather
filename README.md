@@ -2,7 +2,7 @@
   <img src="frontend/public/feather.svg" width="80" height="80" alt="Feather logo" />
 </p>
 <h1 align="center">Feather</h1>
-<p align="center">A minimal editor for Markdown and LaTeX.</p>
+<p align="center">A minimal editor for text, code, Markdown, and LaTeX.</p>
 
 Built with Rust and Tauri. Local files. No accounts or telemetry.
 
@@ -11,13 +11,15 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 ## Features
 
 - Live Markdown, math, and LaTeX/PDF preview.
-- Built-in Rust, TypeScript, Python, and Lean code highlighting; unknown languages use C.
+- Open any UTF-8 text file, including code, `Cargo.toml`, `.env`, and extensionless files.
+- Built-in Lean, Rust, TypeScript/TSX, JavaScript/JSX, C, and Python highlighting.
+- Smooth, synchronized Markdown source and preview scrolling.
 - Autosave, file explorer, and quick open.
 - Feather, GitHub, and Midnight profiles; light/dark themes and Zen mode.
 - Resizable panes and interface zoom.
 - Optional Vim keybindings.
 - Editable Git diff and a Bash terminal (Ctrl + backtick).
-- Save Markdown and LaTeX directly to PDF.
+- Save `.md` and `.tex` directly to PDF.
 - Open files or folders with `feather .`.
 - Built-in feature guide with Markdown, math, and LaTeX examples.
 

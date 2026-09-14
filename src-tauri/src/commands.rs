@@ -169,7 +169,7 @@ pub async fn choose_workspace(
             dialog_app
                 .dialog()
                 .file()
-                .add_filter("Documents", &["md", "markdown", "mdown", "txt", "tex"])
+                .set_title("Open file in Feather")
                 .blocking_pick_file()
         }
     })

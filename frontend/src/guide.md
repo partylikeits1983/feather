@@ -1,6 +1,6 @@
 # Feather feature guide
 
-Feather is a minimal, local editor for Markdown and LaTeX. Open a folder, write, and see the result alongside your source.
+Feather is a minimal, local editor for text, code, Markdown, and LaTeX. Open a folder, write, and see the result alongside your source.
 
 This guide is a Markdown document rendered by Feather. Choose a topic from **Features** in the native menu bar at the top of the screen on macOS, or scroll through the examples. **Back** returns to your previous document.
 
@@ -33,7 +33,7 @@ $$ g(x^2)=\frac{w(x)+w(-x)}{2}+
 
 Feather also accepts `\(...\)`, `\[...\]`, aligned equations, and fenced `math` blocks.
 
-Relative Markdown links open inside Feather. Local images render from the opened workspace; web links open in your browser. Double-click a preview block to jump to its source. The chain button synchronizes scrolling.
+Relative Markdown links open inside Feather. Local images render from the opened workspace; web links open in your browser. Double-click a preview block to jump to its source. The chain button smoothly synchronizes scrolling in both directions, matching positions between source blocks.
 
 ## LaTeX and PDF
 
@@ -72,7 +72,7 @@ If another app changes an open file, Feather reloads it when there are no pendin
 
 ## Files and workspace
 
-Open a file or a folder from the workspace button or the File menu. Use the file explorer to navigate, or **Command+P / Ctrl+P** to find a file by name.
+Open any UTF-8 text file or a folder from the workspace button or the File menu. Code, `Cargo.toml`, `.env`, extensionless files, and unfamiliar extensions are all editable. Use the file explorer to navigate, or **Command+P / Ctrl+P** to find a file by name.
 
 - Click the workspace heading to collapse or expand the entire tree.
 - The buttons beside it create a file or folder.
@@ -92,6 +92,8 @@ If Feather is already running, the command opens the requested document or works
 ## Editing and Vim
 
 The editor supports undo/redo, search, multiple selections, syntax highlighting, line numbers, bracket matching, and line wrapping.
+
+Code files automatically use Lean (`.lean`), Rust (`.rs`), TypeScript (`.ts`, `.tsx`), JavaScript (`.js`, `.jsx`), C (`.c`, `.h`), or Python (`.py`) highlighting. Other text files open as plain text. Code and plain text use the source editor; the PDF export button appears only for `.md` and `.tex`. Autosave, Vim, search, and Git diff work the same way for all text files.
 
 Fenced code blocks support Rust (`rust`, `rs`), TypeScript (`typescript`, `ts`, `tsx`), Python (`python`, `py`), Lean (`lean`, `lean4`), JavaScript, and C. Colours follow your UI profile in both panes and Git diff. PDF exports keep highlighting with a light palette. Unknown language labels use C highlighting; unlabelled blocks and `text` stay plain. The language rules ship with Feather and load only when needed. Lean highlighting covers syntax; it does not check proofs.
 

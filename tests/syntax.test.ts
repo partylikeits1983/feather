@@ -5,7 +5,8 @@ import { markdown } from '@codemirror/lang-markdown';
 import { highlightTree } from '@lezer/highlight';
 import { renderMarkdown } from '../frontend/src/preview/markdown';
 import { codeLanguage, type CodeLanguage } from '../frontend/src/syntax/language-names';
-import { fencedLanguage, loadCodeLanguage } from '../frontend/src/syntax/languages';
+import { fencedLanguage, loadCodeLanguage, fileLanguage } from '../frontend/src/syntax/languages';
+import { canExportPdf, hasPreview } from '../frontend/src/types';
 import { codeHighlighter } from '../frontend/src/syntax/highlighter';
 
 const examples: [string, CodeLanguage, string, string][] = [
@@ -17,6 +18,41 @@ const examples: [string, CodeLanguage, string, string][] = [
 ];
 
 describe('code highlighting', () => {
+  it.each([
+    ['main.rs', 'fn', 'fn main() {}'],
+    ['app.ts', 'const', 'const count: number = 1;'],
+    ['app.tsx', 'const', 'const App = () => <div />;'],
+    ['app.js', 'const', 'const count = 1;'],
+    ['app.jsx', 'const', 'const App = () => <div />;'],
+    ['main.c', 'return', 'int main() { return 0; }'],
+    ['main.h', 'return', 'int square(int x) { return x * x; }'],
+    ['main.py', 'def', 'def main():\n    return 1'],
+    ['Proof.LEAN', 'theorem', 'theorem refl (α : Nat) : α = α := by rfl'],
+  ])('highlights %s as a standalone file', async (path, keyword, source) => {
+    const support = await fileLanguage(path)!.load();
+    const state = EditorState.create({ doc: source, extensions: [support] });
+    const tokens: { text: string; classes: string }[] = [];
+    highlightTree(ensureSyntaxTree(state, source.length, 100)!, codeHighlighter,
+      (from, to, classes) => tokens.push({ text: source.slice(from, to), classes }));
+    expect(tokens).toContainEqual({ text: keyword, classes: 'syntax-keyword' });
+    expect(hasPreview(path)).toBe(false);
+    expect(canExportPdf(path)).toBe(false);
+  });
+
+  it('keeps arbitrary files plain and PDF export exclusive to md and tex', () => {
+    for (const path of ['Cargo.toml', '.env', 'LICENSE', 'custom.unknown', 'constructor', '__proto__', 'notes.txt']) {
+      expect(fileLanguage(path)).toBeNull();
+      expect(hasPreview(path)).toBe(false);
+      expect(canExportPdf(path)).toBe(false);
+    }
+    for (const path of ['notes.md', 'notes.MD', 'paper.tex', 'paper.TEX']) {
+      expect(hasPreview(path)).toBe(true);
+      expect(canExportPdf(path)).toBe(true);
+    }
+    expect(hasPreview('notes.markdown')).toBe(true);
+    expect(canExportPdf('notes.markdown')).toBe(false);
+  });
+
   it.each(examples)('highlights %s with matching editor and preview rules', async (label, language, keyword, code) => {
     const source = '```' + label + '\n' + code + '\n```';
     const { html } = await renderMarkdown(source);

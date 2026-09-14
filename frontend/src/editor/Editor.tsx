@@ -4,12 +4,12 @@ import { EditorView, lineNumbers, highlightActiveLine, highlightActiveLineGutter
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { markdown } from '@codemirror/lang-markdown';
 import { tags } from '@lezer/highlight';
 import type { DocumentSession } from '../state/document';
 import { syncDocument } from './sync';
 import { configureVim } from './vim';
-import { fencedLanguage } from '../syntax/languages';
+import { fileLanguage } from '../syntax/languages';
+import { configureLanguage } from './language';
 import { codeHighlighter } from '../syntax/highlighter';
 
 const colors = HighlightStyle.define([
@@ -41,27 +41,23 @@ const theme = EditorView.theme({
 
 export function editingExtensions() {
   return [lineNumbers(), history(), drawSelection(), highlightActiveLine(), highlightActiveLineGutter(), bracketMatching(), highlightSelectionMatches(),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), markdown({ codeLanguages: fencedLanguage }), syntaxHighlighting(colors), syntaxHighlighting(codeHighlighter), theme, EditorView.lineWrapping];
+    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]), syntaxHighlighting(colors), syntaxHighlighting(codeHighlighter), theme, EditorView.lineWrapping];
 }
 
-export function Editor({ session, dark, locked, vimEnabled, onView, onScroll }: { session: DocumentSession; dark: boolean; locked: boolean; vimEnabled: boolean; onView: (view: EditorView | null) => void; onScroll: (line: number) => void }) {
+export function Editor({ session, dark, locked, vimEnabled, onView }: { session: DocumentSession; dark: boolean; locked: boolean; vimEnabled: boolean; onView: (view: EditorView | null) => void }) {
   const host = useRef<HTMLDivElement>(null), viewRef = useRef<EditorView>();
   const appearance = useRef(new Compartment());
   const editable = useRef(new Compartment());
   const vimKeys = useRef(new Compartment());
-  const scrollHandler = useRef(onScroll); scrollHandler.current = onScroll;
   useEffect(() => {
     let replacing = false;
     const view = new EditorView({ parent: host.current!, state: EditorState.create({ doc: session.text, extensions: [
       vimKeys.current.of([]), editingExtensions(), appearance.current.of(EditorView.theme({}, { dark })),
       editable.current.of(EditorState.readOnly.of(locked)),
-      EditorView.contentAttributes.of({ 'aria-label': 'Markdown source', spellcheck: 'false' }),
+      EditorView.contentAttributes.of({ 'aria-label': `${fileLanguage(session.path)?.name || 'Plain text'} source`, spellcheck: 'false' }),
       EditorView.updateListener.of(update => { if (update.docChanged && !replacing) session.edit(update.state.doc.toString()); }),
-      EditorView.domEventHandlers({ scroll: (_event, view) => {
-        const block = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
-        scrollHandler.current(view.state.doc.lineAt(block.from).number);
-      } }),
     ] }) });
+    const stopLanguage = configureLanguage(view, session.path);
     viewRef.current = view; onView(view);
     const off = session.subscribe(kind => {
       if (kind !== 'status' && session.text !== view.state.doc.toString()) {
@@ -69,7 +65,7 @@ export function Editor({ session, dark, locked, vimEnabled, onView, onScroll }: 
         try { syncDocument(view, session.text, kind === 'edit'); } finally { replacing = false; }
       }
     });
-    return () => { off(); onView(null); view.destroy(); };
+    return () => { stopLanguage(); off(); onView(null); view.destroy(); };
   }, [session]);
   useEffect(() => { viewRef.current?.dispatch({ effects: appearance.current.reconfigure(EditorView.theme({}, { dark })) }); }, [dark]);
   useLayoutEffect(() => { viewRef.current?.dispatch({ effects: editable.current.reconfigure(EditorState.readOnly.of(locked)) }); }, [locked]);

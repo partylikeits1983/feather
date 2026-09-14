@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { MergeView } from '@codemirror/merge';
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, lineNumbers } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { api } from '../api';
 import type { DocumentSession } from '../state/document';
 import { Icon } from '../components/Icon';
 import { editingExtensions } from '../editor/Editor';
 import { syncDocument } from '../editor/sync';
 import { configureVim } from '../editor/vim';
+import { configureLanguage } from '../editor/language';
 
 export default function GitDiff({ session, workspaceId, dark, locked, vimEnabled, onView }: {
   session: DocumentSession; workspaceId?: number; dark: boolean; locked: boolean; vimEnabled: boolean; onView: (view: EditorView | null) => void;
@@ -33,7 +34,7 @@ export default function GitDiff({ session, workspaceId, dark, locked, vimEnabled
       '.cm-gutters': { background: 'var(--panel)', color: 'var(--line-number)', border: 'none' },
     });
     const merge = new MergeView({ parent: host.current,
-      a: { doc: baseline.contents, extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), lineNumbers(), EditorView.lineWrapping, compact,
+      a: { doc: baseline.contents, extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), editingExtensions(), compact,
         appearance.current.of(EditorView.theme({}, { dark })), EditorView.contentAttributes.of({ 'aria-label': 'Git HEAD version' })] },
       b: { doc: session.text, extensions: [vimKeys.current.of([]), compact, editingExtensions(),
         appearance.current.of(EditorView.theme({}, { dark })), editable.current.of(EditorState.readOnly.of(locked)),
@@ -44,13 +45,14 @@ export default function GitDiff({ session, workspaceId, dark, locked, vimEnabled
           setChanges(merge.chunks.length); setIndex(-1);
         }),
       ] }, gutter: true, highlightChanges: true, collapseUnchanged: { margin: 4, minSize: 12 }, diffConfig: { scanLimit: 1000, timeout: 100 } });
+    const stopLanguages = [configureLanguage(merge.a, session.path), configureLanguage(merge.b, session.path)];
     view.current = merge; onView(merge.b); setChanges(merge.chunks.length); setIndex(-1);
     const off = session.subscribe(kind => {
       if (kind === 'status' || session.text === merge.b.state.doc.toString()) return;
       replacing = true;
       try { syncDocument(merge.b, session.text, kind === 'edit'); } finally { replacing = false; }
     });
-    return () => { off(); view.current = undefined; onView(null); merge.destroy(); };
+    return () => { stopLanguages.forEach(stop => stop()); off(); view.current = undefined; onView(null); merge.destroy(); };
   }, [baseline, session]);
   useEffect(() => {
     for (const pane of [view.current?.a, view.current?.b]) pane?.dispatch({ effects: appearance.current.reconfigure(EditorView.theme({}, { dark })) });

@@ -74,11 +74,52 @@ fn symlinks_cannot_escape_scope() {
 }
 
 #[test]
-fn rejects_binary_and_unsupported_documents() {
+fn rejects_binary_documents_regardless_of_extension() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("bad.md"), [0xff, 0xfe]).unwrap();
-    fs::write(dir.path().join("image.png"), "image").unwrap();
+    fs::write(dir.path().join("image.png"), b"\x89PNG\r\n\x1a\n").unwrap();
+    fs::write(dir.path().join("binary.unknown"), b"text\0binary").unwrap();
     let (ws, _) = Workspace::open(dir.path()).unwrap();
     assert!(ws.read("bad.md").is_err());
     assert!(ws.read("image.png").is_err());
+    assert!(ws.read("binary.unknown").is_err());
+}
+
+#[test]
+fn opens_searches_creates_and_saves_code_and_arbitrary_text_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ws, _) = Workspace::open(dir.path()).unwrap();
+    for filename in [
+        "proof.lean",
+        "main.rs",
+        "app.ts",
+        "app.tsx",
+        "index.js",
+        "index.jsx",
+        "main.c",
+        "main.h",
+        "script.py",
+        "Cargo.toml",
+        ".env",
+        ".gitignore",
+        "LICENSE",
+        "Makefile",
+        "custom.unfamiliar",
+    ] {
+        ws.create(filename, false).unwrap();
+        let doc = ws.read(filename).unwrap();
+        ws.save(filename, "text with Unicode: α\n", &doc.version)
+            .unwrap();
+        let (direct, selected) = Workspace::open(dir.path().join(filename)).unwrap();
+        assert_eq!(selected.as_deref(), Some(filename));
+        assert_eq!(
+            direct.read(filename).unwrap().contents,
+            "text with Unicode: α\n"
+        );
+        assert!(ws
+            .search(filename)
+            .unwrap()
+            .paths
+            .contains(&filename.to_string()));
+    }
 }

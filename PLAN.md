@@ -21,6 +21,15 @@ User feedback during implementation adds persistent Vim keybindings, compact set
 4. Implement 500 ms autosave, conflict detection, flush on switching/closing, file/folder create/rename/trash/duplicate/reveal, watcher events, scroll sync, pane resizing.
 5. Add optional offline Tectonic compilation with timeout, debounce and PDF preview; CLI install, platform packaging configuration, CI checks, benchmarks, and usage documentation.
 
+## Text and code editing update
+
+1. Remove extension restrictions from file opening, quick open, creation, and the native dialog; validate UTF-8 contents before editing.
+2. Reuse bundled language parsers for standalone code and both Git diff panes; keep unfamiliar file types plain.
+3. Keep preview modes for Markdown/TeX and PDF export only for `.md`/`.tex`, preserving existing editing features.
+4. Reduce explorer rows from 32 to 28 px and indentation steps from 16 to 12 px.
+5. Replace block-snapping scroll sync with continuous, bidirectional pixel interpolation and easing.
+6. Verify file round trips, highlighting, PDF visibility, existing editor workflows, and scrolling; build and launch locally for review before pushing.
+
 ## Acceptance checks
 
 - Real Markdown files open, edit, save atomically and reopen correctly.

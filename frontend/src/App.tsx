@@ -4,9 +4,11 @@ import { api, desktop } from './api';
 import { DocumentSession } from './state/document';
 import { welcome } from './welcome';
 import guideText from './guide.md?raw';
-import { basename, dirname, isText, resolveRelative, type Appearance, type Entry, type Workspace } from './types';
+import { basename, dirname, isMarkdown, hasPreview, canExportPdf, fileGlyph, resolveRelative, type Appearance, type Entry, type Workspace } from './types';
 import { Editor } from './editor/Editor';
+import { fileLanguage } from './syntax/languages';
 import { Preview, TexPreview, type PreviewHandle } from './preview/Preview';
+import { synchronizeScroll } from './preview/scroll-sync';
 import { Explorer } from './explorer/Explorer';
 import { Icon, type IconName } from './components/Icon';
 import { Dialog } from './components/Dialog';
@@ -49,8 +51,18 @@ export function App() {
   const [deleteEntry, setDeleteEntry] = useState<Entry | null>(null), [disk, setDisk] = useState<{ contents: string; version: string } | null>(null);
   const [locked, setLocked] = useState(false), navigating = useRef(false);
   const editor = useRef<EditorView | null>(null), diffEditor = useRef<EditorView | null>(null), preview = useRef<PreviewHandle | null>(null), panes = useRef<HTMLDivElement>(null);
-  const scrollLock = useRef({ side: '', until: 0 });
+  const stopScrollSync = useRef<() => void>();
   const isScratch = session === scratch.current, isGuide = session === guide.current, isLocal = isScratch || isGuide, tex = !isLocal && /\.tex$/i.test(session.path);
+
+  const previewable = hasPreview(session.path), viewMode = previewable || mode === 'diff' ? mode : 'source';
+
+  function connectScrollSync() {
+    stopScrollSync.current?.(); stopScrollSync.current = undefined;
+    if (sync && mode === 'split' && isMarkdown(session.path) && editor.current && preview.current) {
+      stopScrollSync.current = synchronizeScroll(editor.current, preview.current);
+    }
+  }
+  useEffect(() => { connectScrollSync(); return () => stopScrollSync.current?.(); }, [session, sync, mode]);
 
   useEffect(() => { const media = matchMedia('(prefers-color-scheme: dark)'); const update = () => setSystemDark(media.matches); media.addEventListener('change', update); return () => media.removeEventListener('change', update); }, []);
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; store('feather.appearance', appearance); }, [appearance, dark]);
@@ -76,7 +88,7 @@ export function App() {
     setZen(value => !value); setSettings(false); setMenu(null);
   }
   async function exportPdf() {
-    if (exporting) return; setExporting(true); setError('');
+    if (exporting || !canExportPdf(current.current.path)) return; setExporting(true); setError('');
     try {
       const active = current.current, ws = workspaceRef.current;
       if (/\.tex$/i.test(active.path) && ws && active !== scratch.current) {
@@ -109,7 +121,7 @@ export function App() {
     if (ws.selected) await load(ws, ws.selected);
     else {
       const entries = await api.list(ws.id);
-      const first = entries.find(e => /^readme\.md$/i.test(e.name)) || entries.find(e => !e.isDir && isText(e.path));
+      const first = entries.find(e => !e.isDir && /^readme\.md$/i.test(e.name)) || entries.find(e => !e.isDir && (hasPreview(e.path) || /\.txt$/i.test(e.path)));
       if (first) await load(ws, first.path);
     }
   }
@@ -215,7 +227,7 @@ export function App() {
       if (key === 'o') choose(event.shiftKey);
       if (key === 'p') { setQuery(''); setQuick(true); }
       if (key === 'b') setSidebar(value => !value);
-      if (key === '\\') setMode(value => value === 'split' ? 'source' : 'split');
+      if (key === '\\' && hasPreview(current.current.path)) setMode(value => value === 'split' ? 'source' : 'split');
     };
     const unload = (event: BeforeUnloadEvent) => { if (current.current.dirty) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('keydown', zenShortcut, true);
@@ -244,7 +256,6 @@ export function App() {
     if (!filename || filename === '.' || filename === '..' || /[/\\\x00-\x1f]/.test(filename)) { setActionError('Use a name without slashes or control characters.'); return; }
     const parent = ['rename', 'duplicate'].includes(action.kind) ? dirname(action.path) : action.path;
     const path = parent ? `${parent}/${filename}` : filename;
-    if (action.kind !== 'folder' && !isText(path) && action.kind !== 'rename' && action.kind !== 'duplicate') { setActionError('Use .md, .markdown, .txt, or .tex for a text document.'); return; }
     navigating.current = true; setLocked(true);
     try {
       if (action.kind !== 'copy') await current.current.flush();
@@ -272,11 +283,6 @@ export function App() {
     view.dispatch({ ...(select ? { selection: { anchor: from } } : {}), effects: EditorView.scrollIntoView(from, { y: 'start', yMargin: 28 }) });
     if (select) view.focus();
   }
-  function syncScroll(side: 'source' | 'preview', line: number) {
-    if (!sync || mode !== 'split' || (scrollLock.current.side !== side && performance.now() < scrollLock.current.until)) return;
-    scrollLock.current = { side, until: performance.now() + 100 };
-    if (side === 'source') preview.current?.scrollToLine(line); else scrollEditor(line, false);
-  }
   function resize(event: PointerEvent, kind: 'sidebar' | 'split') {
     const target = event.currentTarget as HTMLElement; target.setPointerCapture(event.pointerId); document.body.classList.add('resizing');
     const move = (event: PointerEvent) => {
@@ -288,7 +294,7 @@ export function App() {
   }
   function followLink(href: string) {
     if (/^(https?:|mailto:)/i.test(href)) void api.external(href).catch(report);
-    else if (workspace) { try { const path = resolveRelative(session.path, href); if (!isText(path)) { setNotice('Feather opens Markdown, text, and TeX links.'); return; } openFile(path); } catch (error) { report(error); } }
+    else if (workspace) { try { const path = resolveRelative(session.path, href); openFile(path); } catch (error) { report(error); } }
     else setNotice('Open a folder to follow links to other documents.');
   }
   const button = (icon: IconName, title: string, onClick: () => void, active = false) => <button class={`icon-button ${active ? 'active' : ''}`} title={title} aria-label={title} aria-pressed={active} onClick={onClick}><Icon name={icon} /></button>;
@@ -307,17 +313,17 @@ export function App() {
         <div class="sidebar-bottom">{workspace && <button class="scratch-link" onClick={() => void transition(async () => attach(scratch.current!))}><Icon name="feather" size={14} />Scratchpad</button>}</div>
       </aside><div class="resize-handle sidebar-resize" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" tabIndex={0} aria-valuenow={sidebarWidth} aria-valuemin={180} aria-valuemax={380} onPointerDown={event => resize(event, 'sidebar')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSidebarWidth(n => Math.max(180, Math.min(380, n + (event.key === 'ArrowLeft' ? -10 : 10)))); }} /></>}
       <main class="main">
-        <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{tex ? 'T' : 'M'}</span><strong>{basename(session.path)}</strong>{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isLocal && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
-          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}<button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), mode === 'source')}{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</div></div>
+        <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{fileGlyph(session.path)}</span><strong>{basename(session.path)}</strong>{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isLocal && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
+          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}{canExportPdf(session.path) && <button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>}{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), viewMode === 'source')}{previewable && <>{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</>}</div></div>
         </div>
         {(error || status === 'error' || status === 'conflict') && <div class="error-banner" role="alert"><span>{error || session.error.replace('CONFLICT: ', '')}</span>{status === 'conflict' && <><button onClick={() => { if (workspace) void api.read(workspace.id, session.path).then(setDisk).catch(report); }}>Review disk</button><button onClick={() => begin({ kind: 'copy', path: dirname(session.path) })}>Save a copy</button></>}{status === 'error' && <button onClick={() => void session.flush().catch(report)}>Retry save</button>}{error && <button class="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><Icon name="close" size={14} /></button>}</div>}
-        <div class={`panes mode-${mode}`} ref={panes}>
-          <section class="source-pane" style={{ width: mode === 'split' ? `${split}%` : '100%' }} aria-label="Source editor">
-            <div class="pane-label"><span>{tex ? 'TEX' : 'MARKDOWN'}</span><span>{isGuide ? 'Feature guide · read only' : isScratch ? 'Your local scratchpad' : dirname(session.path)}</span></div>
-            <Editor session={session} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { editor.current = view; }} onScroll={line => syncScroll('source', line)} />
+        <div class={`panes mode-${viewMode}`} ref={panes}>
+          <section class="source-pane" style={{ width: viewMode === 'split' ? `${split}%` : '100%' }} aria-label="Source editor">
+            <div class="pane-label"><span>{(fileLanguage(session.path)?.name || 'Plain text').toUpperCase()}</span><span>{isGuide ? 'Feature guide · read only' : isScratch ? 'Your local scratchpad' : dirname(session.path)}</span></div>
+            <Editor session={session} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { editor.current = view; connectScrollSync(); }} />
           </section>
-          {mode === 'split' && <div class="resize-handle split-resize" role="separator" aria-label="Resize editor and preview" aria-orientation="vertical" tabIndex={0} aria-valuenow={split} aria-valuemin={25} aria-valuemax={75} onPointerDown={event => resize(event, 'split')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSplit(n => Math.max(25, Math.min(75, n + (event.key === 'ArrowLeft' ? -2 : 2)))); }} />}
-          {mode === 'diff' ? <Suspense fallback={<div class="git-empty">Loading diff…</div>}><GitDiff session={session} workspaceId={isLocal ? undefined : workspace?.id} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { diffEditor.current = view; }} /></Suspense> : mode !== 'source' && <section class="preview-pane" aria-label="Document preview"><div class="pane-label"><span>{tex ? 'PDF PREVIEW' : 'PREVIEW'}</span><div class="preview-tools"><span class="live-dot" />Live{!tex && button('link', 'Synchronize scrolling', () => setSync(!sync), sync)}</div></div>{tex && workspace ? <TexPreview key={`${workspace.id}-${session.path}`} session={session} workspaceId={workspace.id} /> : <Preview session={session} workspaceId={isLocal ? undefined : workspace?.id} imageRevision={revision} onLink={followLink} onSource={line => { if (mode === 'preview') setMode('split'); scrollEditor(line, true); }} onScroll={line => syncScroll('preview', line)} onHandle={handle => { preview.current = handle; if (handle && isGuide && guideLine.current !== null) { const line = guideLine.current; guideLine.current = null; scrollEditor(line, false); handle.scrollToLine(line); } }} />}</section>}
+          {viewMode === 'split' && <div class="resize-handle split-resize" role="separator" aria-label="Resize editor and preview" aria-orientation="vertical" tabIndex={0} aria-valuenow={split} aria-valuemin={25} aria-valuemax={75} onPointerDown={event => resize(event, 'split')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSplit(n => Math.max(25, Math.min(75, n + (event.key === 'ArrowLeft' ? -2 : 2)))); }} />}
+          {mode === 'diff' ? <Suspense fallback={<div class="git-empty">Loading diff…</div>}><GitDiff session={session} workspaceId={isLocal ? undefined : workspace?.id} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { diffEditor.current = view; }} /></Suspense> : viewMode !== 'source' && <section class="preview-pane" aria-label="Document preview"><div class="pane-label"><span>{tex ? 'PDF PREVIEW' : 'PREVIEW'}</span><div class="preview-tools"><span class="live-dot" />Live{!tex && button('link', 'Synchronize scrolling', () => setSync(!sync), sync)}</div></div>{tex && workspace ? <TexPreview key={`${workspace.id}-${session.path}`} session={session} workspaceId={workspace.id} /> : <Preview session={session} workspaceId={isLocal ? undefined : workspace?.id} imageRevision={revision} onLink={followLink} onSource={line => { if (mode === 'preview') setMode('split'); scrollEditor(line, true); }} onHandle={handle => { preview.current = handle; connectScrollSync(); if (handle && isGuide && guideLine.current !== null) { const line = guideLine.current; guideLine.current = null; scrollEditor(line, false); handle.scrollToLine(line); } }} />}</section>}
         </div>
         {terminalStarted && workspace && <Suspense fallback={<div class="terminal-loading">Starting Bash…</div>}><TerminalPanel visible={terminalVisible} dark={dark} profile={profile} zoom={zoom} workspaceId={workspace.id} directory={isLocal ? '' : dirname(session.path)} onClose={() => { setTerminalVisible(false); (mode === 'diff' ? diffEditor.current : editor.current)?.focus(); }} /></Suspense>}
       </main>
@@ -328,7 +334,7 @@ export function App() {
     {deleteEntry && <Dialog title="Move to trash?" onClose={() => setDeleteEntry(null)}><p class="dialog-description">“{deleteEntry.name}”{deleteEntry.isDir ? ' and everything inside it' : ''} will move to your system trash.</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => setDeleteEntry(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { if (!workspace) return; await api.trash(workspace.id, deleteEntry.path); if (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/')) attach(scratch.current!); setDeleteEntry(null); setRevision(n => n + 1); })}>Move to trash</button></div></Dialog>}
     {disk && <Dialog title="This file has two versions" class="conflict-dialog" onClose={() => setDisk(null)}><p class="dialog-description">Your text is preserved. Compare it with the version on disk before choosing what to save.</p><div class="conflict-columns"><div><h3>Your edits</h3><pre>{session.text}</pre></div><div><h3>On disk</h3><pre>{disk.contents}</pre></div></div><div class="dialog-buttons"><button class="secondary-button" onClick={() => { session.reload(disk.contents, disk.version); setDisk(null); setError(''); }}>Use disk version</button><button class="primary-button" onClick={() => { session.version = disk.version; session.status = 'modified'; void session.flush().then(() => { setDisk(null); setError(''); }).catch(report); }}>Save my version</button></div></Dialog>}
     {quick && <Dialog title="Find a file" class="quick-dialog" onClose={() => setQuick(false)}><div class="quick-input"><Icon name="search" size={18} /><input autoFocus aria-label="Find a file" placeholder="Type a file name…" value={query} onInput={event => setQuery(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setQuickIndex(n => Math.max(0, Math.min(results.length - 1, n + (event.key === 'ArrowDown' ? 1 : -1)))); } if (event.key === 'Enter' && results[quickIndex]) { openFile(results[quickIndex]); setQuick(false); } }} /><kbd>esc</kbd></div><div class="quick-results" role="listbox" aria-label="Matching files">{results.map((path, index) => <button role="option" aria-selected={quickIndex === index} class={quickIndex === index ? 'highlighted' : ''} onClick={() => { openFile(path); setQuick(false); }}><Icon name="file" /><span>{basename(path)}<small>{dirname(path) || workspace?.name}</small></span><Icon name="arrow" size={14} /></button>)}{!results.length && <p>{workspace ? 'No matching files.' : 'Open a folder to find your documents.'}</p>}</div>{truncated && <p class="quick-hint">Showing the first 200 matches within 50,000 entries. Narrow your search.</p>}</Dialog>}
-    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New Markdown file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} J`], ...(modifier === '⌘' ? [['Toggle fullscreen', '⌃ ⌘ F']] : []), ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
+    {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} J`], ...(modifier === '⌘' ? [['Toggle fullscreen', '⌃ ⌘ F']] : []), ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Files autosave after 500 ms of quiet.</p></Dialog>}
     {notice && <div class="toast" role="status"><Icon name="check" size={16} /><span>{notice}</span><button class="icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><Icon name="close" size={14} /></button></div>}
   </div>;
 }

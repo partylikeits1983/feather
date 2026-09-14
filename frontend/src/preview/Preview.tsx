@@ -7,10 +7,10 @@ import { lazy, Suspense } from 'preact/compat';
 
 const PdfViewer = lazy(() => import('./PdfViewer'));
 
-export interface PreviewHandle { scrollToLine: (line: number) => void }
-export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHandle, imageRevision }: {
+export interface PreviewHandle { element: HTMLElement; blocks: () => HTMLElement[]; scrollToLine: (line: number) => void }
+export function Preview({ session, workspaceId, onLink, onSource, onHandle, imageRevision }: {
   session: DocumentSession; workspaceId?: number; onLink: (href: string) => void; onSource: (line: number) => void;
-  onScroll: (line: number) => void; onHandle: (handle: PreviewHandle | null) => void; imageRevision: number;
+  onHandle: (handle: PreviewHandle | null) => void; imageRevision: number;
 }) {
   const scroll = useRef<HTMLDivElement>(null), article = useRef<HTMLElement>(null);
   const [result, setResult] = useState<{ html: string; truncated: boolean; document?: DocumentSession }>({ html: '', truncated: false });
@@ -42,7 +42,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
   useEffect(() => {
     if (result.document !== session) { onHandle(null); return; }
     blocks.current = Array.from(article.current?.querySelectorAll<HTMLElement>('[data-source-line]') || []);
-    onHandle({ scrollToLine(line) {
+    onHandle({ element: scroll.current!, blocks: () => blocks.current, scrollToLine(line) {
       let closest = blocks.current[0];
       for (const block of blocks.current) { if (Number(block.dataset.sourceLine) <= line) closest = block; else break; }
       if (closest && scroll.current) scroll.current.scrollTop += closest.getBoundingClientRect().top - scroll.current.getBoundingClientRect().top - 32;
@@ -57,12 +57,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onScroll, onHa
     return () => { cancelled = true; onHandle(null); };
   }, [result.html, result.document, session, workspaceId, imageRevision]);
 
-  return <div class="preview-scroll" ref={scroll} onScroll={() => {
-    const top = scroll.current!.getBoundingClientRect().top + 40;
-    let closest = blocks.current[0];
-    for (const block of blocks.current) { if (block.getBoundingClientRect().top <= top) closest = block; else break; }
-    if (closest) onScroll(Number(closest.dataset.sourceLine));
-  }}>
+  return <div class="preview-scroll" ref={scroll}>
     {error && <div class="preview-notice">{error}</div>}
     <article class="markdown-body" ref={article} onClick={event => {
       const anchor = (event.target as Element).closest('a');
