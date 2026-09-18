@@ -20,6 +20,20 @@ async function selectNativeMenu(page: Page, action: string) {
   await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
 }
 
+async function deferNativeStartup(page: Page, emptyLaunch: boolean) {
+  await page.addInitScript(({ emptyLaunch }) => {
+    const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    const invoke = internals.invoke;
+    // Hold native initialization until the scratchpad has unsaved edits. This
+    // reproduces the CI startup race without depending on machine speed.
+    const ready = new Promise<void>(resolve => Object.assign(window, { resumeNativeStartup: resolve }));
+    internals.invoke = async (command, args) => {
+      if (command === 'plugin:event|listen' && args.event === 'open-requested') await ready;
+      return command === 'open_requested' && emptyLaunch ? invoke(command, args).then(() => null) : invoke(command, args);
+    };
+  }, { emptyLaunch });
+}
+
 test('standalone code highlights, saves explicitly, and keeps its language in the diff', async ({ page }) => {
   const files = [
     ['proof.lean', 'Lean', 'theorem', 'theorem refl (α : Nat) : α = α := by rfl'],
@@ -586,14 +600,11 @@ test('Zen shortcut leaves Undo and Redo intact in source and diff, and works thr
 });
 
 test('Native Features menu works without a workspace and remains available in Zen mode', async ({ page }) => {
-  await page.addInitScript(() => {
-    const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
-    const invoke = internals.invoke;
-    internals.invoke = (command, args) => command === 'open_requested' ? invoke(command, args).then(() => null) : invoke(command, args);
-  });
+  await deferNativeStartup(page, true);
   await page.goto('/');
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.fill('# My scratch notes');
+  await page.evaluate(() => (window as unknown as { resumeNativeStartup: () => void }).resumeNativeStartup());
   await selectNativeMenu(page, 'guide:Markdown and math');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Markdown and math', exact: true })).toBeInViewport();
@@ -704,4 +715,22 @@ test('opens images through explorer, quick open and links without reading binary
   await expect(page.getByRole('alert')).toContainText('Image unavailable');
   const reads = await page.evaluate(() => (window as unknown as { testWorkspace: { readPaths: string[] } }).testWorkspace.readPaths);
   expect(reads.some(path => /\.(png|svg)$/.test(path))).toBe(false);
+});
+
+test('a pending launch request preserves early scratchpad edits until explicitly saved', async ({ page }) => {
+  await deferNativeStartup(page, false);
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# Written before native startup');
+  await page.evaluate(() => (window as unknown as { resumeNativeStartup: () => void }).resumeNativeStartup());
+  const prompt = page.getByRole('dialog', { name: 'Save changes?' });
+  await expect(prompt).toContainText('Scratchpad.md');
+  await prompt.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(source).toContainText('# Written before native startup');
+  await expect(page.locator('.document-title strong')).toHaveText('Scratchpad.md');
+  expect(await page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toBeNull();
+  await selectNativeMenu(page, 'open-folder');
+  await prompt.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My notes', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toBe('# Written before native startup');
 });

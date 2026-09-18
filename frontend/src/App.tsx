@@ -148,7 +148,15 @@ export function App() {
   }
   const openFile = (path: string) => { if (current.current !== scratch.current && current.current !== guide.current && path === current.current.path) return; void transition(async () => { if (workspaceRef.current) await load(workspaceRef.current, path); }); };
   const choose = (folder: boolean) => void transition(async () => { const ws = await api.choose(folder); if (ws) await activate(ws); });
-  const requested = () => transition(async () => { const ws = await api.requested(); if (ws) await activate(ws); });
+  const requested = () => {
+    // Existing filesystem sessions must save before native activation changes
+    // their scope. An empty launch has no document to leave: check it first.
+    const leavingWorkspace = workspaceRef.current !== null;
+    return transition(async () => {
+      const ws = await api.requested();
+      if (ws && (leavingWorkspace || await confirmLeave())) await activate(ws);
+    }, leavingWorkspace);
+  };
   const close = () => void transition(async () => { await api.quit(); });
 
   function openGuide(section = '') {
