@@ -58,7 +58,7 @@ The macOS installer includes Tectonic and prepares standard LaTeX packages. If y
 
 ## Saving and exporting
 
-Files autosave after 500 ms without typing. **Command+S** on macOS, or **Ctrl+S** elsewhere, saves immediately. Feather also saves pending edits before switching documents or closing through its window or menu.
+Edits stay unsaved until you press **Command+S** on macOS, **Ctrl+S** elsewhere, or click **Save**. A dot beside the filename marks unsaved changes. Switching documents or closing offers **Save changes**, **Discard changes**, and **Cancel**. A failed save keeps your edits open. Typing during a save remains unsaved until your next save.
 
 Use **Export PDF** in the document toolbar, choose a filename, and save:
 
@@ -77,7 +77,7 @@ Open any UTF-8 text file or a folder from the workspace button or the File menu.
 - Click the workspace heading to collapse or expand the entire tree.
 - The buttons beside it create a file or folder.
 - Item action menus offer rename, move to trash, and reveal in the file manager. Files can also be duplicated; folder menus can create items inside that folder.
-- Scratchpad lives at the bottom-left. Its text is saved locally between launches.
+- Scratchpad lives at the bottom-left. Use Save to keep its text locally between launches.
 
 The terminal launcher accepts a file or folder:
 
@@ -89,13 +89,19 @@ feather paper.tex
 
 If Feather is already running, the command opens the requested document or workspace in that instance.
 
+### Images and Markdown selections
+
+Open PNG, JPEG, GIF, WebP, SVG, AVIF, BMP, or ICO images from the explorer, quick open, a local link, or the native file dialog. The viewer offers **Fit image**, **Actual size**, and image dimensions. Images remain read only; files above 10 MB are rejected.
+
+Click and drag in Markdown source to select text. The selection also appears in the preview, and moving the source cursor shows a preview caret. Selecting preview text highlights the matching Markdown, including inline formatting. Rendered equations map to their source formula as a whole.
+
 ## Editing and Vim
 
 The editor supports undo/redo, search, multiple selections, syntax highlighting, line numbers, bracket matching, and line wrapping.
 
-Code files automatically use Lean (`.lean`), Rust (`.rs`), TypeScript (`.ts`, `.tsx`), JavaScript (`.js`, `.jsx`), C (`.c`, `.h`), or Python (`.py`) highlighting. Other text files open as plain text. Code and plain text use the source editor; the PDF export button appears only for `.md` and `.tex`. Autosave, Vim, search, and Git diff work the same way for all text files.
+Code files automatically use Lean (`.lean`), Rust (`.rs`), Solidity (`.sol`), TypeScript (`.ts`, `.tsx`), JavaScript (`.js`, `.jsx`), C (`.c`, `.h`), or Python (`.py`) highlighting. Other text files open as plain text. Code and plain text use the source editor; the PDF export button appears only for `.md` and `.tex`. Manual saving, Vim, search, and Git diff work the same way for all text files.
 
-Fenced code blocks support Rust (`rust`, `rs`), TypeScript (`typescript`, `ts`, `tsx`), Python (`python`, `py`), Lean (`lean`, `lean4`), JavaScript, and C. Colours follow your UI profile in both panes and Git diff. PDF exports keep highlighting with a light palette. Unknown language labels use C highlighting; unlabelled blocks and `text` stay plain. The language rules ship with Feather and load only when needed. Lean highlighting covers syntax; it does not check proofs.
+Fenced code blocks support Solidity (`solidity`, `sol`), Rust (`rust`, `rs`), TypeScript (`typescript`, `ts`, `tsx`), Python (`python`, `py`), Lean (`lean`, `lean4`), JavaScript, and C. Colours follow your UI profile in both panes and Git diff. PDF exports keep highlighting with a light palette. Unknown language labels use C highlighting; unlabelled blocks and `text` stay plain. The language rules ship with Feather and load only when needed. Lean highlighting covers syntax; it does not check proofs.
 
 Enable **Settings → Vim mode** for modal navigation:
 
@@ -119,7 +125,7 @@ In Zen mode and macOS fullscreen, **Esc** returns to Normal mode and stays in th
 
 **Git diff** compares the active file with its Git `HEAD` version. Removed lines are highlighted red on the left; added lines are green on the right.
 
-The current-file pane is editable and supports autosave, undo/redo, search, and Vim. Changes are synchronized with the main editor. Use the arrows to move between changes and **Refresh Git diff** after a commit or other Git operation.
+The current-file pane is editable and supports manual saving, undo/redo, search, and Vim. Changes are synchronized with the main editor. Use the arrows to move between changes and **Refresh Git diff** after a commit or other Git operation.
 
 **Ctrl + backtick** opens Bash in the active document's directory. For the scratchpad or this guide, it starts at the workspace root. An existing shell keeps its working directory as you switch files.
 
@@ -134,7 +140,7 @@ These commands run only when you enter them. Hiding the terminal keeps the shell
 
 ## Appearance and shortcuts
 
-**Settings** contains Feather, GitHub, and Midnight profiles, each with system, light, and dark appearance. Try **GitHub → Dark** for a neutral dark interface with blue accents.
+**Settings** contains GitHub (the default), Feather, and Midnight profiles, each with system, light, and dark appearance. Try **GitHub → Dark** for a neutral dark interface with blue accents.
 
 Resize the sidebar and editor/preview split by dragging their dividers. Zoom changes the whole interface. Appearance, profile, Vim, Zen, and zoom settings persist between launches.
 

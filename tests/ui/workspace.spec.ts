@@ -20,9 +20,10 @@ async function selectNativeMenu(page: Page, action: string) {
   await page.evaluate(action => (window as unknown as { testWorkspace: { emit: (event: string, payload: unknown) => void } }).testWorkspace.emit('menu-action', action), action);
 }
 
-test('standalone code highlights, autosaves, and keeps its language in the diff', async ({ page }) => {
+test('standalone code highlights, saves explicitly, and keeps its language in the diff', async ({ page }) => {
   const files = [
     ['proof.lean', 'Lean', 'theorem', 'theorem refl (α : Nat) : α = α := by rfl'],
+    ['Token.sol', 'Solidity', 'contract', 'pragma solidity ^0.8.0; contract Token { uint256 public supply = 10; }'],
     ['main.rs', 'Rust', 'fn', 'fn main() { let count = 1; }'],
     ['app.ts', 'TypeScript', 'const', 'const count: number = 1;'],
     ['app.tsx', 'TSX', 'const', 'const App = () => <div />;'],
@@ -47,6 +48,7 @@ test('standalone code highlights, autosaves, and keeps its language in the diff'
     await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Document preview' })).toHaveCount(0);
     await source.fill(contents + '\n');
+    await page.keyboard.press('ControlOrMeta+s');
     await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   }
   await page.getByRole('treeitem', { name: '· main.rs', exact: true }).click();
@@ -57,6 +59,7 @@ test('standalone code highlights, autosaves, and keeps its language in the diff'
   await current.fill('fn main() { let count = 42; }\n');
   await page.getByRole('button', { name: 'Source view', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Rust source' })).toContainText('42');
+  await page.keyboard.press('ControlOrMeta+s');
   await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Find a file/ }).click();
@@ -76,6 +79,7 @@ test('creates and reopens Cargo.toml, env, extensionless, and unfamiliar files a
     const source = page.getByRole('textbox', { name: 'Plain text source' });
     await expect(source).toBeVisible();
     await source.fill('# Plain text\nAPP_ENV=development\n');
+    await page.keyboard.press('ControlOrMeta+s');
     await expect(page.getByRole('button', { name: 'Export PDF', exact: true })).toHaveCount(0);
     await expect(source.locator('.syntax-keyword')).toHaveCount(0);
     await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
@@ -170,7 +174,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(({ paper }) => {
     const state = {
       files: { 'notes.md': { contents: '# My notes\n\n[Proof](./proof.md)', version: '1' }, 'proof.md': { contents: '# The proof\n\n$x^2$', version: '1' }, 'paper.tex': { contents: '\\documentclass{article}\n\\begin{document}A small observation\\end{document}', version: '1' } } as Record<string, { contents: string; version: string }>,
-      dirs: new Set<string>(), callbacks: new Map<number, (event: unknown) => void>(), listeners: new Map<string, number>(), counter: 0, requested: false, compileFailure: false, terminalInput: '', terminalDirectory: '', exported: '',
+      dirs: new Set<string>(), callbacks: new Map<number, (event: unknown) => void>(), listeners: new Map<string, number>(), counter: 0, requested: false, compileFailure: false, terminalInput: '', terminalDirectory: '', exported: '', quit: false, saveFailure: false, readPaths: [] as string[],
       emit(event: string, payload: unknown) { this.callbacks.get(this.listeners.get(event)!)?.({ event, payload, id: 1 }); },
     };
     Object.assign(window, {
@@ -194,8 +198,10 @@ test.beforeEach(async ({ page }) => {
           if (command === 'terminal_start') { state.terminalDirectory = path; state.emit('terminal-output', [1, Array.from(new TextEncoder().encode('bash$ '))]); return { id: 1, cwd: '/research/' + path }; }
           if (command === 'terminal_write') { state.terminalInput += args.data; return; }
           if (command === 'export_markdown') { state.exported = String(args.html); return '/research/notes.pdf'; }
-          if (command === 'read_document') { if (!state.files[path]) throw new Error('File not found'); return { path, ...state.files[path] }; }
-          if (command === 'save_document') { const file = state.files[path]; if (!file || file.version !== args.version) throw new Error('CONFLICT: Changed on disk'); file.contents = String(args.contents); file.version = String(Number(file.version) + 1); return file.version; }
+          if (command === 'quit_app') { state.quit = true; return; }
+          if (command === 'read_image') { if (path === 'broken.png') throw new Error('Image unavailable'); return 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="blue"/></svg>'); }
+          if (command === 'read_document') { state.readPaths.push(path); if (!state.files[path]) throw new Error('File not found'); return { path, ...state.files[path] }; }
+          if (command === 'save_document') { if (state.saveFailure) throw new Error('Disk full'); const file = state.files[path]; if (!file || file.version !== args.version) throw new Error('CONFLICT: Changed on disk'); file.contents = String(args.contents); file.version = String(Number(file.version) + 1); return file.version; }
           if (command === 'create_entry') { if (state.files[path] || state.dirs.has(path)) throw new Error('Name exists'); if (args.directory) state.dirs.add(path); else state.files[path] = { contents: '', version: '1' }; }
           if (command === 'rename_entry' || command === 'duplicate_entry') { state.files[String(args.destination)] = { ...state.files[path] }; if (command === 'rename_entry') delete state.files[path]; }
           if (command === 'trash_entry') delete state.files[path];
@@ -205,11 +211,12 @@ test.beforeEach(async ({ page }) => {
   }, { paper });
 });
 
-test('open, autosave, follow a link, quick open, create, rename and trash', async ({ page }) => {
+test('open, manual save, follow a link, quick open, create, rename and trash', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.fill('# Edited notes\n\n[Proof](./proof.md)');
+  await page.keyboard.press('ControlOrMeta+s');
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Proof', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'The proof' })).toBeVisible();
@@ -221,6 +228,7 @@ test('open, autosave, follow a link, quick open, create, rename and trash', asyn
   await page.getByLabel('File name').fill('thought.md'); await page.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page.locator('.document-title strong')).toHaveText('thought.md');
   await source.fill('# A thought');
+  await page.keyboard.press('ControlOrMeta+s');
   await page.getByRole('treeitem', { name: 'M thought.md', exact: true }).hover();
   await page.getByRole('button', { name: 'Actions for thought.md' }).click();
   await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
@@ -238,8 +246,7 @@ test('outside edits preserve dirty text and conflict review can retain my versio
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.evaluate(element => {
-    // Inject the outside edit in the input event, before the 500 ms autosave.
-    // A separate browser round trip can lose that race on a busy CI runner.
+    // Inject an outside edit while the buffer has unsaved changes.
     element.addEventListener('input', () => {
       const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
       state.files['notes.md'] = { contents: '# Outside edit', version: '2' }; state.emit('workspace-changed', [1, ['notes.md']]);
@@ -282,7 +289,7 @@ test('on-demand Git diff, terminal in document directory, zoom, and Markdown PDF
   await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { exported: string } }).testWorkspace.exported)).toContain('My notes');
 });
 
-test('edit the current Git version, autosave, and carry changes between diff and source', async ({ page }) => {
+test('edit the current Git version, manual save, and carry changes between diff and source', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
   await page.getByRole('button', { name: 'Git diff', exact: true }).click();
@@ -291,6 +298,7 @@ test('edit the current Git version, autosave, and carry changes between diff and
   await expect(current).toHaveAttribute('contenteditable', 'true');
   await expect(head).toHaveAttribute('contenteditable', 'false');
   await current.fill('# Written in the diff\n\nA new paragraph.');
+  await page.keyboard.press('ControlOrMeta+s');
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { files: Record<string, { contents: string }> } }).testWorkspace.files['notes.md'].contents)).toBe('# Written in the diff\n\nA new paragraph.');
   await expect(head).toContainText('Original notes');
@@ -304,9 +312,10 @@ test('edit the current Git version, autosave, and carry changes between diff and
   await current.fill('# Original notes\n\nA previous paragraph.');
   await expect(page.getByText('No changes from HEAD', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next change' })).toBeDisabled();
-  // Switching files flushes the diff's pending write just like the source editor.
+  // Switching files asks before saving pending edits from the diff.
   await current.fill('# Saved before switching');
   await page.getByRole('treeitem', { name: 'M proof.md', exact: true }).click();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(current).toContainText('The proof');
   await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
   await expect(current).toContainText('Saved before switching');
@@ -517,6 +526,7 @@ test('Native Features menu opens the guide, jumps to examples, exports, and retu
   await source.fill('# Notes before the guide');
   await expect(page.getByRole('button', { name: 'Features', exact: true })).toHaveCount(0);
   await selectNativeMenu(page, 'guide');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Feather feature guide', exact: true })).toBeInViewport();
   await expect(page.locator('.document-title strong')).toHaveText('Feather Guide.md');
   await expect(source).toHaveAttribute('aria-readonly', 'true');
@@ -585,6 +595,7 @@ test('Native Features menu works without a workspace and remains available in Ze
   const source = page.getByRole('textbox', { name: 'Markdown source' });
   await source.fill('# My scratch notes');
   await selectNativeMenu(page, 'guide:Markdown and math');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Markdown and math', exact: true })).toBeInViewport();
   await page.keyboard.press('ControlOrMeta+j');
   await expect(page.locator('.app-header')).toBeHidden();
@@ -625,4 +636,72 @@ test('Vim Escape remains local to the editable diff while dialogs and Bash keep 
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { terminalInput: string } }).testWorkspace.terminalInput)).toBe('\u001b');
   await expect(page.locator('.app-header')).toBeHidden();
+});
+
+test('manual save keeps disk unchanged, prompts on navigation and close, and preserves failed saves', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# Unsaved work');
+  await page.getByRole('button', { name: 'New folder', exact: true }).click();
+  await page.getByLabel('Folder name').fill('assets');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(source).toContainText('Unsaved work');
+  await expect(page.getByRole('img', { name: 'Unsaved changes' })).toBeVisible();
+  await page.waitForTimeout(750);
+  const diskText = () => page.evaluate(() => (window as unknown as { testWorkspace: { files: Record<string, { contents: string }> } }).testWorkspace.files['notes.md'].contents);
+  expect(await diskText()).toContain('# My notes');
+  await page.getByRole('treeitem', { name: 'M proof.md', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(source).toContainText('Unsaved work'); expect(await diskText()).toContain('# My notes');
+  await page.evaluate(() => { (window as unknown as { testWorkspace: { saveFailure: boolean } }).testWorkspace.saveFailure = true; });
+  await page.getByRole('treeitem', { name: 'M proof.md', exact: true }).click();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Disk full'); await expect(source).toContainText('Unsaved work');
+  await page.evaluate(() => { (window as unknown as { testWorkspace: { saveFailure: boolean } }).testWorkspace.saveFailure = false; });
+  await page.getByRole('button', { name: 'Save file', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'Unsaved changes' })).toHaveCount(0); expect(await diskText()).toBe('# Unsaved work');
+  await source.fill('# Discard this');
+  await page.getByRole('treeitem', { name: 'M proof.md', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await expect(source).toContainText('The proof'); expect(await diskText()).toBe('# Unsaved work');
+  await source.fill('# Save before quitting');
+  await selectNativeMenu(page, 'quit');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(() => (window as unknown as { testWorkspace: { quit: boolean } }).testWorkspace.quit)).toBe(false);
+  await selectNativeMenu(page, 'quit');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { testWorkspace: { quit: boolean } }).testWorkspace.quit)).toBe(true);
+  expect(await page.evaluate(() => (window as unknown as { testWorkspace: { files: Record<string, { contents: string }> } }).testWorkspace.files['proof.md'].contents)).toBe('# Save before quitting');
+});
+
+test('opens images through explorer, quick open and links without reading binary files as text', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  await page.evaluate(() => {
+    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+    for (const path of ['photo.png', 'drawing.svg', 'broken.png']) state.files[path] = { contents: 'binary image', version: '1' };
+    state.emit('workspace-changed', [1, []]);
+  });
+  await page.getByRole('treeitem', { name: '▧ photo.png', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'photo.png', exact: true })).toBeVisible();
+  await expect(page.getByText('200 × 100', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /source/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save file', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Git diff', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Actual size', exact: true }).click();
+  await expect(page.locator('.image-scroll')).toHaveClass(/actual-size/);
+  await page.screenshot({ path: 'artifacts/feather-image-viewer.png' });
+  await page.getByRole('button', { name: /Find a file/ }).click();
+  await page.getByRole('textbox', { name: 'Find a file', exact: true }).fill('drawing.svg');
+  await page.getByRole('option', { name: 'drawing.svg research', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'drawing.svg', exact: true })).toBeVisible();
+  await page.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Markdown source' }).fill('[Image](./photo.png)');
+  await page.keyboard.press('ControlOrMeta+s');
+  await page.getByRole('link', { name: 'Image', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'photo.png', exact: true })).toBeVisible();
+  await page.getByRole('treeitem', { name: '▧ broken.png', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Image unavailable');
+  const reads = await page.evaluate(() => (window as unknown as { testWorkspace: { readPaths: string[] } }).testWorkspace.readPaths);
+  expect(reads.some(path => /\.(png|svg)$/.test(path))).toBe(false);
 });

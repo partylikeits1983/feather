@@ -123,3 +123,36 @@ fn opens_searches_creates_and_saves_code_and_arbitrary_text_files() {
             .contains(&filename.to_string()));
     }
 }
+
+#[test]
+fn opens_images_through_scoped_image_reader() {
+    let dir = tempfile::tempdir().unwrap();
+    for (extension, mime) in [
+        ("png", "image/png"),
+        ("JPG", "image/jpeg"),
+        ("svg", "image/svg+xml"),
+        ("webp", "image/webp"),
+        ("gif", "image/gif"),
+        ("avif", "image/avif"),
+        ("bmp", "image/bmp"),
+        ("ico", "image/x-icon"),
+    ] {
+        let name = format!("image.{extension}");
+        fs::write(dir.path().join(&name), b"image bytes").unwrap();
+        let (ws, selected) = Workspace::open(dir.path().join(&name)).unwrap();
+        assert_eq!(selected.as_deref(), Some(name.as_str()));
+        assert!(ws
+            .image(&name)
+            .unwrap()
+            .starts_with(&format!("data:{mime};base64,")));
+        assert!(ws.search("image").unwrap().paths.contains(&name));
+    }
+    let (ws, _) = Workspace::open(dir.path()).unwrap();
+    assert!(ws.image("../outside.png").is_err());
+    fs::write(dir.path().join("large.png"), vec![0; 10 * 1024 * 1024 + 1]).unwrap();
+    assert!(ws
+        .image("large.png")
+        .unwrap_err()
+        .to_string()
+        .contains("10 MB"));
+}

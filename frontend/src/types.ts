@@ -4,9 +4,10 @@ export interface Document { path: string; contents: string; version: string }
 export type Appearance = 'system' | 'light' | 'dark';
 export const isMarkdown = (path: string) => /\.(md|markdown|mdown)$/i.test(path);
 export const isTex = (path: string) => /\.tex$/i.test(path);
+export const isImage = (path: string) => /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(path);
 export const hasPreview = (path: string) => isMarkdown(path) || isTex(path);
 export const canExportPdf = (path: string) => /\.(md|tex)$/i.test(path);
-export const fileGlyph = (path: string) => isTex(path) ? 'T' : isMarkdown(path) ? 'M' : '·';
+export const fileGlyph = (path: string) => isImage(path) ? '▧' : isTex(path) ? 'T' : isMarkdown(path) ? 'M' : '·';
 export const basename = (path: string) => path.split('/').pop() || path;
 export const dirname = (path: string) => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 

@@ -1,5 +1,6 @@
-export type CodeLanguage = 'rust' | 'typescript' | 'tsx' | 'javascript' | 'jsx' | 'python' | 'lean' | 'c';
+export type CodeLanguage = 'solidity' | 'rust' | 'typescript' | 'tsx' | 'javascript' | 'jsx' | 'python' | 'lean' | 'c';
 const aliases: Record<string, CodeLanguage> = {
+  solidity: 'solidity', sol: 'solidity',
   rust: 'rust', rs: 'rust', typescript: 'typescript', ts: 'typescript', tsx: 'tsx',
   javascript: 'javascript', js: 'javascript', jsx: 'jsx', python: 'python', py: 'python',
   lean: 'lean', lean4: 'lean', c: 'c', h: 'c',

@@ -4,6 +4,7 @@ import { isMarkdown, isTex } from '../types';
 
 // Shared by the editor and preview worker. Imports become local, on-demand chunks.
 const languages = {
+  solidity: LanguageDescription.of({ name: 'Solidity', extensions: ['sol'], load: () => import('./solidity').then(m => new LanguageSupport(m.solidityLanguage)) }),
   rust: LanguageDescription.of({ name: 'Rust', extensions: ['rs'], load: () => import('@codemirror/lang-rust').then(m => m.rust()) }),
   typescript: LanguageDescription.of({ name: 'TypeScript', extensions: ['ts', 'mts', 'cts'], load: () => import('@codemirror/lang-javascript').then(m => m.javascript({ typescript: true })) }),
   tsx: LanguageDescription.of({ name: 'TSX', extensions: ['tsx'], load: () => import('@codemirror/lang-javascript').then(m => m.javascript({ typescript: true, jsx: true })) }),

@@ -10,6 +10,7 @@ import { canExportPdf, hasPreview } from '../frontend/src/types';
 import { codeHighlighter } from '../frontend/src/syntax/highlighter';
 
 const examples: [string, CodeLanguage, string, string][] = [
+  ['sol', 'solidity', 'contract', 'pragma solidity ^0.8.0; contract Token { uint256 public supply = 10; }'],
   ['rust', 'rust', 'fn', 'fn square(x: i32) -> i32 { x * x }'],
   ['ts', 'typescript', 'const', 'const name: string = "Feather";'],
   ['py', 'python', 'def', 'def square(x: int):\n    return x * x'],
@@ -19,6 +20,7 @@ const examples: [string, CodeLanguage, string, string][] = [
 
 describe('code highlighting', () => {
   it.each([
+    ['Token.SOL', 'contract', 'contract Token { uint256 public supply = 10; }'],
     ['main.rs', 'fn', 'fn main() {}'],
     ['app.ts', 'const', 'const count: number = 1;'],
     ['app.tsx', 'const', 'const App = () => <div />;'],

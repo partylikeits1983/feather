@@ -18,6 +18,8 @@ impl Workspace {
             "webp" => "image/webp",
             "svg" => "image/svg+xml",
             "avif" => "image/avif",
+            "bmp" => "image/bmp",
+            "ico" => "image/x-icon",
             _ => return Err(Error::Message("Unsupported image format".into())),
         };
         if fs::metadata(&path)?.len() > 10 * 1024 * 1024 {

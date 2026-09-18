@@ -7,13 +7,13 @@ import { lazy, Suspense } from 'preact/compat';
 
 const PdfViewer = lazy(() => import('./PdfViewer'));
 
-export interface PreviewHandle { element: HTMLElement; blocks: () => HTMLElement[]; scrollToLine: (line: number) => void }
+export interface PreviewHandle { element: HTMLElement; article: HTMLElement; source: string; blocks: () => HTMLElement[]; scrollToLine: (line: number) => void }
 export function Preview({ session, workspaceId, onLink, onSource, onHandle, imageRevision }: {
   session: DocumentSession; workspaceId?: number; onLink: (href: string) => void; onSource: (line: number) => void;
   onHandle: (handle: PreviewHandle | null) => void; imageRevision: number;
 }) {
   const scroll = useRef<HTMLDivElement>(null), article = useRef<HTMLElement>(null);
-  const [result, setResult] = useState<{ html: string; truncated: boolean; document?: DocumentSession }>({ html: '', truncated: false });
+  const [result, setResult] = useState<{ html: string; source?: string; truncated: boolean; document?: DocumentSession }>({ html: '', truncated: false });
   const [error, setError] = useState('');
   const blocks = useRef<HTMLElement[]>([]);
   useEffect(() => {
@@ -42,7 +42,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onHandle, imag
   useEffect(() => {
     if (result.document !== session) { onHandle(null); return; }
     blocks.current = Array.from(article.current?.querySelectorAll<HTMLElement>('[data-source-line]') || []);
-    onHandle({ element: scroll.current!, blocks: () => blocks.current, scrollToLine(line) {
+    onHandle({ element: scroll.current!, article: article.current!, source: result.source || '', blocks: () => blocks.current, scrollToLine(line) {
       let closest = blocks.current[0];
       for (const block of blocks.current) { if (Number(block.dataset.sourceLine) <= line) closest = block; else break; }
       if (closest && scroll.current) scroll.current.scrollTop += closest.getBoundingClientRect().top - scroll.current.getBoundingClientRect().top - 32;
@@ -61,7 +61,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onHandle, imag
     {error && <div class="preview-notice">{error}</div>}
     <article class="markdown-body" ref={article} onClick={event => {
       const anchor = (event.target as Element).closest('a');
-      if (anchor) { event.preventDefault(); const href = anchor.getAttribute('href'); if (!href) return;
+      if (anchor) { event.preventDefault(); if (document.getSelection()?.isCollapsed === false) return; const href = anchor.getAttribute('href'); if (!href) return;
         if (href.startsWith('#')) { try { article.current?.querySelector(`#${CSS.escape(decodeURIComponent(href.slice(1)))}`)?.scrollIntoView({ block: 'start' }); } catch { /* malformed anchor */ } }
         else onLink(href);
       }
@@ -70,7 +70,7 @@ export function Preview({ session, workspaceId, onLink, onSource, onHandle, imag
       const block = (event.target as Element).closest<HTMLElement>('[data-source-line]');
       if (block) onSource(Number(block.dataset.sourceLine));
     }} dangerouslySetInnerHTML={{ __html: result.document === session ? result.html : '' }} />
-    {result.truncated && <div class="preview-notice"><Icon name="eye" /> Showing the beginning of this large document to keep editing responsive. The full source is editable and saved.</div>}
+    {result.truncated && <div class="preview-notice"><Icon name="eye" /> Showing the beginning of this large document to keep editing responsive. The full source remains editable.</div>}
   </div>;
 }
 

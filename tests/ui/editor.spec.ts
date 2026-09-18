@@ -24,6 +24,7 @@ test('scratchpad, live math, themes, views, shortcuts, and persistence', async (
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+s');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toContain('A new thought');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'A new thought' })).toBeVisible();
@@ -105,4 +106,74 @@ test('Vim owns Escape in Insert, Visual and Normal modes while Zen remains activ
   await expect(page.getByText('--NORMAL--', { exact: true })).toHaveCount(0);
   await source.focus();
   expect(await escape()).toBe(false);
+});
+
+test('GitHub is the default profile and scratchpad edits require an explicit save', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-profile', 'github');
+  await page.getByRole('textbox', { name: 'Markdown source' }).fill('# Pending scratchpad');
+  await page.waitForTimeout(750);
+  expect(await page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toBeNull();
+  await expect(page.getByRole('img', { name: 'Unsaved changes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save file', exact: true }).click();
+  await expect(page.getByRole('img', { name: 'Unsaved changes' })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toBe('# Pending scratchpad');
+});
+
+test('dragging Markdown text visibly selects it and mirrors the selection and caret in preview', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('Alpha beta gamma\n\nSecond **bold** and `code` paragraph.');
+  await expect(page.locator('.markdown-body p').first()).toHaveText('Alpha beta gamma');
+  const bounds = await source.locator('.cm-line').first().evaluate(element => {
+    const text = element.firstChild!;
+    const range = document.createRange(); range.setStart(text, 0); range.setEnd(text, 10);
+    const rect = range.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  await page.mouse.move(bounds.x + 1, bounds.y + bounds.height / 2); await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width, bounds.y + bounds.height / 2, { steps: 12 }); await page.mouse.up();
+  await expect(page.locator('.cm-selectionBackground').first()).toBeVisible();
+  await expect(page.locator('.preview-selection').first()).toBeVisible();
+  const activeBackground = await source.locator('.cm-activeLine').evaluate(element => getComputedStyle(element).backgroundColor);
+  expect(activeBackground).toMatch(/(?:0\.4|40%)/);
+  await page.screenshot({ path: 'artifacts/feather-source-selection.png' });
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.preview-caret')).toBeVisible();
+  const first = await page.locator('.preview-caret').boundingBox();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(async () => (await page.locator('.preview-caret').boundingBox())?.x).toBeLessThan(first!.x);
+  await page.screenshot({ path: 'artifacts/feather-preview-cursor.png' });
+  expect(errors).toEqual([]);
+});
+
+test('preview selection mirrors exact Markdown text across formatting and repeated paragraphs', async ({ page }) => {
+  await page.goto('/');
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('Same **bold** &amp; `code`.\n\nSame **bold** &amp; `code`.');
+  await expect(page.locator('.markdown-body p')).toHaveCount(2);
+  const bounds = await page.locator('.markdown-body p').nth(1).evaluate(element => {
+    const range = document.createRange(); range.setStart(element.firstChild!.firstChild!, 0); range.setEnd(element.firstChild!.firstChild!, 4);
+    const rect = range.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  await page.mouse.move(bounds.x + .1, bounds.y + bounds.height / 2); await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width - .1, bounds.y + bounds.height / 2, { steps: 10 }); await page.mouse.up();
+  await expect(page.locator('.cm-preview-selection')).toHaveText('Same');
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('Same');
+  await page.locator('.markdown-body p').nth(1).evaluate(element => {
+    const start = element.querySelector('strong span')!.firstChild!;
+    const end = element.querySelector('code')!.firstChild!;
+    const selection = window.getSelection()!; selection.removeAllRanges();
+    const range = document.createRange(); range.setStart(start, 1); range.setEnd(end, 3); selection.addRange(range);
+  });
+  await expect(page.locator('.cm-preview-selection')).toHaveText('old** &amp; `cod');
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('old & cod');
+  await page.screenshot({ path: 'artifacts/feather-preview-selection.png' });
+  // Keyboard selection in the source replaces the preview's mirrored decoration.
+  await source.focus(); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('Shift+ArrowRight');
+  await expect(page.locator('.cm-preview-selection')).toHaveCount(0);
+  await expect(page.locator('.preview-selection').first()).toBeVisible();
+  await source.fill('Replacement');
+  await expect(page.locator('.markdown-body p')).toHaveText(['Replacement']);
+  await expect(page.locator('.cm-preview-selection')).toHaveCount(0);
 });

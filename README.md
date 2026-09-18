@@ -12,10 +12,12 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 
 - Live Markdown, math, and LaTeX/PDF preview.
 - Open any UTF-8 text file, including code, `Cargo.toml`, `.env`, and extensionless files.
-- Built-in Lean, Rust, TypeScript/TSX, JavaScript/JSX, C, and Python highlighting.
+- Built-in Lean, Rust, Solidity, TypeScript/TSX, JavaScript/JSX, C, and Python highlighting.
 - Smooth, synchronized Markdown source and preview scrolling.
-- Autosave, file explorer, and quick open.
-- Feather, GitHub, and Midnight profiles; light/dark themes and Zen mode.
+- Manual saving with an unsaved indicator, file explorer, and quick open.
+- Image viewing with fit and actual-size modes.
+- Matching selections and cursor positions in Markdown source and preview.
+- GitHub (default), Feather, and Midnight profiles; light/dark themes and Zen mode.
 - Resizable panes and interface zoom.
 - Optional Vim keybindings.
 - Editable Git diff and a Bash terminal (Ctrl + backtick).

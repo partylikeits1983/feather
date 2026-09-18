@@ -10,7 +10,6 @@ export class DocumentSession {
   status: SaveStatus = 'saved';
   error = '';
   private listeners = new Set<(kind: Change) => void>();
-  private timer: ReturnType<typeof setTimeout> | undefined;
   private flight: Promise<void> | undefined;
   private disposed = false;
   constructor(public path: string, contents: string, version: string, private writer: Writer) {
@@ -24,21 +23,17 @@ export class DocumentSession {
     this.text = text;
     this.emit('edit');
     if (this.status === 'conflict') return;
-    this.setStatus(this.dirty ? 'modified' : 'saved');
-    clearTimeout(this.timer);
-    if (this.dirty) this.timer = setTimeout(() => { void this.flush().catch(() => {}); }, 500);
+    this.setStatus(this.flight ? 'saving' : this.dirty ? 'modified' : 'saved');
   }
   async flush(): Promise<void> {
-    clearTimeout(this.timer);
-    if (this.status === 'conflict') throw new Error(this.error || 'Resolve the file conflict before continuing.');
-    if (this.flight) { await this.flight; if (this.dirty) return this.flush(); return; }
-    if (!this.dirty) return;
-    this.flight = this.writeLoop();
-    try { await this.flight; } finally { this.flight = undefined; }
-  }
-  private async writeLoop() {
-    while (this.dirty && !this.disposed) {
-      const snapshot = this.text;
+    // Save only the snapshot explicitly requested by the user. Later typing stays dirty.
+    const snapshot = this.text;
+    const previous = this.flight;
+    const write = async () => {
+      if (previous) await previous;
+      if (this.disposed) return;
+      if (this.status === 'conflict') throw new Error(this.error || 'Resolve the file conflict before saving.');
+      if (snapshot === this.savedText) return;
       this.setStatus('saving');
       try {
         this.version = await this.writer(snapshot, this.version);
@@ -50,8 +45,12 @@ export class DocumentSession {
         this.setStatus(this.error.includes('CONFLICT:') ? 'conflict' : 'error');
         throw error;
       }
-    }
+    };
+    const flight = write();
+    this.flight = flight;
+    try { await flight; } finally { if (this.flight === flight) this.flight = undefined; }
   }
+  async settled() { await this.flight; }
   async external(contents: string, version: string) {
     // Watch events caused by our own atomic rename arrive before the IPC response.
     if (this.flight) await this.flight.catch(() => {});
@@ -60,10 +59,9 @@ export class DocumentSession {
     else this.reload(contents, version);
   }
   reload(contents: string, version: string) {
-    clearTimeout(this.timer);
     this.text = contents; this.savedText = contents; this.version = version; this.error = '';
     this.setStatus('saved'); this.emit('reload');
   }
-  missing() { clearTimeout(this.timer); this.error = 'CONFLICT: This document was moved or deleted outside Feather. Save a copy to keep your text.'; this.setStatus('conflict'); }
-  dispose() { clearTimeout(this.timer); this.disposed = true; this.listeners.clear(); }
+  missing() { this.error = 'CONFLICT: This document was moved or deleted outside Feather. Save a copy to keep your text.'; this.setStatus('conflict'); }
+  dispose() { this.disposed = true; this.listeners.clear(); }
 }

@@ -3,21 +3,32 @@ import { DocumentSession } from '../frontend/src/state/document';
 
 afterEach(() => vi.useRealTimers());
 describe('save queue', () => {
-  it('debounces and flushes the newest text', async () => {
+  it('never saves on a timer and explicitly saves the newest text', async () => {
     vi.useFakeTimers(); const writer = vi.fn(async () => 'v2');
     const doc = new DocumentSession('a.md', 'old', 'v1', writer);
     doc.edit('one'); await vi.advanceTimersByTimeAsync(400); doc.edit('two');
     await vi.advanceTimersByTimeAsync(499); expect(writer).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1); expect(writer).toHaveBeenCalledWith('two', 'v1'); expect(doc.dirty).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000); expect(writer).not.toHaveBeenCalled();
+    await doc.flush(); expect(writer).toHaveBeenCalledWith('two', 'v1'); expect(doc.dirty).toBe(false);
     doc.dispose();
   });
-  it('serializes edits made during a save without losing the last edit', async () => {
+  it('leaves edits made during a save unsaved until the next explicit save', async () => {
     let finish!: (version: string) => void;
     const writer = vi.fn().mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; })).mockResolvedValueOnce('v3');
     const doc = new DocumentSession('a.md', 'old', 'v1', writer);
     doc.edit('first'); const save = doc.flush(); doc.edit('second'); finish('v2'); await save;
+    expect(writer).toHaveBeenCalledTimes(1); expect(doc.savedText).toBe('first'); expect(doc.text).toBe('second'); expect(doc.status).toBe('modified');
+    await doc.flush();
     expect(writer).toHaveBeenNthCalledWith(2, 'second', 'v2'); expect(doc.savedText).toBe('second'); expect(doc.version).toBe('v3');
     doc.dispose();
+  });
+  it('serializes repeated explicit saves and keeps newer typing dirty', async () => {
+    let finish!: (version: string) => void;
+    const writer = vi.fn().mockImplementationOnce(() => new Promise<string>(resolve => { finish = resolve; })).mockResolvedValueOnce('v3');
+    const doc = new DocumentSession('a.md', 'old', 'v1', writer);
+    doc.edit('first'); const first = doc.flush(); doc.edit('second'); const second = doc.flush(); doc.edit('third');
+    finish('v2'); await Promise.all([first, second]);
+    expect(writer).toHaveBeenNthCalledWith(2, 'second', 'v2'); expect(doc.savedText).toBe('second'); expect(doc.text).toBe('third'); expect(doc.dirty).toBe(true);
   });
   it('preserves dirty text on conflict and blocks switching', async () => {
     const doc = new DocumentSession('a.md', 'old', 'v1', async () => { throw new Error('CONFLICT: outside change'); });

@@ -20,7 +20,7 @@ describe('preview', () => {
     const { html } = await renderMarkdown(source);
     expect(html).not.toContain('katex-error');
     expect(html.match(/class="katex-display"/g)?.length).toBeGreaterThanOrEqual(4);
-    expect(html).toMatch(/<p[^>]*>All arithmetic is in the finite field/);
+    expect(html).toMatch(/<p[^>]*><span[^>]*>All arithmetic is in the finite field/);
     expect(html).toContain('id="distance-and-lists-in-soundness"');
     expect(html).toContain('href="https://eccc.weizmann.ac.il/report/2019/044/"');
     const line = source.split('\n').findIndex(line => line.startsWith('## Distance')) + 1;
@@ -30,8 +30,8 @@ describe('preview', () => {
     const { html } = await renderMarkdown('$$ x+\ny $$ After the equation.\n\n`$$code$$` and \\$\\$literal\n\n```text\n$$code\nmore$$\n```');
     expect(html.match(/class="katex-display"/g)).toHaveLength(1);
     expect(html).not.toContain('katex-error');
-    expect(html).toMatch(/<p[^>]*>After the equation/);
-    expect(html).toContain('<code>$$code$$</code>');
+    expect(html).toMatch(/<p[^>]*><span[^>]*>After the equation/);
+    expect(html).toMatch(/<code[^>]*>\$\$code\$\$<\/code>/);
     expect(html).toContain('$$literal');
   });
   it('does not execute raw HTML or load remote images and unsafe links', async () => {

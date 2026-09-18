@@ -1,5 +1,6 @@
-export type IconName = 'feather' | 'folder' | 'file' | 'chevron' | 'plus' | 'search' | 'sidebar' | 'split' | 'eye' | 'sun' | 'moon' | 'monitor' | 'arrow' | 'more' | 'close' | 'check' | 'link' | 'rename' | 'copy' | 'trash' | 'external' | 'keyboard' | 'new-file' | 'new-folder' | 'diff' | 'refresh' | 'terminal' | 'pdf' | 'focus';
+export type IconName = 'save' | 'feather' | 'folder' | 'file' | 'chevron' | 'plus' | 'search' | 'sidebar' | 'split' | 'eye' | 'sun' | 'moon' | 'monitor' | 'arrow' | 'more' | 'close' | 'check' | 'link' | 'rename' | 'copy' | 'trash' | 'external' | 'keyboard' | 'new-file' | 'new-folder' | 'diff' | 'refresh' | 'terminal' | 'pdf' | 'focus';
 const paths: Record<IconName, string> = {
+  save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8',
   'new-file': 'M14 3H5v18h7M14 3v6h5l-5-6ZM19 13v8m-4-4h8',
   'new-folder': 'M3 7V5h6l2 3h10v4M3 7v13h9M18 14v8m-4-4h8',
   diff: 'M8 3v18M16 3v18M3 7h10M13 17h8M5 12h6',
