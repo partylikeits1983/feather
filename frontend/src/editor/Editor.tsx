@@ -50,7 +50,7 @@ export function Editor({ session, dark, locked, vimEnabled, onView }: { session:
   const appearance = useRef(new Compartment());
   const editable = useRef(new Compartment());
   const vimKeys = useRef(new Compartment());
-  useEffect(() => {
+  useLayoutEffect(() => {
     let replacing = false;
     const view = new EditorView({ parent: host.current!, state: EditorState.create({ doc: session.text, extensions: [
       vimKeys.current.of([]), editingExtensions(), appearance.current.of(EditorView.theme({}, { dark })),

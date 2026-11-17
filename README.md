@@ -15,6 +15,7 @@ Built with Rust and Tauri. Local files. No accounts or telemetry.
 - Built-in Lean, Rust, Solidity, TypeScript/TSX, JavaScript/JSX, C, and Python highlighting.
 - Smooth, synchronized Markdown source and preview scrolling.
 - Manual saving with an unsaved indicator, file explorer, and quick open.
+- Personal Markdown notes in an expandable Scratchpad, available from any workspace.
 - Image viewing with fit and actual-size modes.
 - Matching selections and cursor positions in Markdown source and preview.
 - GitHub (default), Feather, and Midnight profiles; light/dark themes and Zen mode.

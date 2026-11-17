@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { EditorView } from '@codemirror/view';
 import { api, desktop } from './api';
 import { DocumentSession } from './state/document';
-import { welcome } from './welcome';
+import { Notebook } from './state/notebook';
 import guideText from './guide.md?raw';
 import { basename, dirname, isImage, isMarkdown, hasPreview, canExportPdf, fileGlyph, resolveRelative, type Appearance, type Entry, type Workspace } from './types';
 import { Editor } from './editor/Editor';
@@ -12,6 +12,7 @@ import { synchronizeSelection } from './preview/selection-sync';
 import { synchronizeScroll } from './preview/scroll-sync';
 import { ImageViewer } from './preview/ImageViewer';
 import { Explorer } from './explorer/Explorer';
+import { Notes } from './explorer/Notes';
 import { Icon, type IconName } from './components/Icon';
 import { Dialog } from './components/Dialog';
 import { lazy, Suspense } from 'preact/compat';
@@ -24,17 +25,17 @@ const modifier = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 type FileAction = { kind: 'file' | 'folder' | 'rename' | 'duplicate' | 'copy'; path: string };
 
 export function App() {
-  const scratch = useRef<DocumentSession>();
-  if (!scratch.current) scratch.current = new DocumentSession('Scratchpad.md', stored('feather.scratchpad', welcome), 'scratch', async text => {
-    localStorage.setItem('feather.scratchpad', text); return 'scratch';
-  });
+  const notebook = useRef<Notebook>();
+  if (!notebook.current) notebook.current = new Notebook({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) });
+  const scratch = useRef(notebook.current.scratchpad);
+  const emptyWorkspace = useRef(new DocumentSession('', '', 'empty', async () => 'empty'));
   const guide = useRef<DocumentSession>();
   if (!guide.current) guide.current = new DocumentSession('Feather Guide.md', guideText, 'guide', async () => 'guide');
   const guideReturn = useRef<{ session: DocumentSession; mode: 'split' | 'source' | 'preview' | 'diff' }>();
   const guideLine = useRef<number | null>(null);
   const [session, setSession] = useState(scratch.current), [workspace, setWorkspace] = useState<Workspace | null>(null);
   const current = useRef(session), workspaceRef = useRef(workspace); current.current = session; workspaceRef.current = workspace;
-  const [status, setStatus] = useState(session.status), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [status, setStatus] = useState(session.status), [error, setError] = useState(notebook.current.error), [notice, setNotice] = useState('');
   const [appearance, setAppearance] = useState<Appearance>(() => { const value = stored('feather.appearance', 'system'); return value === 'light' || value === 'dark' ? value : 'system'; });
   const [systemDark, setSystemDark] = useState(matchMedia('(prefers-color-scheme: dark)').matches);
   const dark = appearance === 'dark' || (appearance === 'system' && systemDark);
@@ -46,6 +47,11 @@ export function App() {
   const [profile, setProfile] = useState(() => { const value = stored('feather.profile', 'github'); return value === 'feather' || value === 'midnight' ? value : 'github'; });
   const [zen, setZen] = useState(() => stored('feather.zen', 'false') === 'true');
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const [notesCollapsed, setNotesCollapsed] = useState(false), [notesRevision, setNotesRevision] = useState(0);
+  const [noteAction, setNoteAction] = useState<{ note?: DocumentSession } | null>(null);
+  const [noteMenu, setNoteMenu] = useState<{ note: DocumentSession; x: number; y: number } | null>(null);
+  const [deleteNote, setDeleteNote] = useState<DocumentSession | null>(null);
+  const [quickNotes, setQuickNotes] = useState(false);
   const [vimEnabled, setVimEnabled] = useState(() => stored('feather.vim', 'false') === 'true');
   const [query, setQuery] = useState(''), [results, setResults] = useState<string[]>([]), [truncated, setTruncated] = useState(false), [quickIndex, setQuickIndex] = useState(0);
   const [menu, setMenu] = useState<{ entry: Entry; x: number; y: number } | null>(null);
@@ -56,7 +62,9 @@ export function App() {
   const editor = useRef<EditorView | null>(null), diffEditor = useRef<EditorView | null>(null), preview = useRef<PreviewHandle | null>(null), panes = useRef<HTMLDivElement>(null);
   const stopSelectionSync = useRef<() => void>();
   const stopScrollSync = useRef<() => void>();
-  const isScratch = session === scratch.current, isGuide = session === guide.current, isLocal = isScratch || isGuide, tex = !isLocal && /\.tex$/i.test(session.path);
+  const isPersonal = (document: DocumentSession) => notebook.current!.owns(document);
+  const isEmpty = session === emptyWorkspace.current;
+  const isScratch = session === scratch.current, isNote = isPersonal(session), isGuide = session === guide.current, isLocal = isNote || isGuide || isEmpty, tex = !isLocal && /\.tex$/i.test(session.path);
 
   const imageFile = isImage(session.path);
   const previewable = hasPreview(session.path), viewMode = previewable || mode === 'diff' ? mode : 'source';
@@ -85,7 +93,7 @@ export function App() {
     else { document.documentElement.style.zoom = String(zoom); document.body.style.height = `${100 / zoom}vh`; document.body.style.width = `${100 / zoom}vw`; }
   }, [zoom]);
   useEffect(() => { setStatus(session.status); return session.subscribe(kind => { if (kind === 'status') setStatus(session.status); }); }, [session]);
-  useEffect(() => { document.title = `${basename(session.path)} — Feather`; if (desktop) void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().setTitle(document.title)).catch(() => {}); }, [session]);
+  useEffect(() => { document.title = `${isEmpty ? workspace?.name || 'Workspace' : basename(session.path)} — Feather`; if (desktop) void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().setTitle(document.title)).catch(() => {}); }, [session, session.path, workspace?.name]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(timer); }, [notice]);
 
   const report = (error: unknown) => setError(String(error).replace(/^Error: /, ''));
@@ -107,7 +115,7 @@ export function App() {
         if (path) setNotice(`Saved ${path}`);
       } else {
         const { exportMarkdown } = await import('./preview/export');
-        const path = await exportMarkdown(active.text, active.path, active === scratch.current || active === guide.current ? undefined : ws?.id);
+        const path = await exportMarkdown(active.text, active.path, isPersonal(active) || active === guide.current ? undefined : ws?.id);
         if (path) setNotice(`Saved ${path}`);
       }
     } catch (error) { report(error); } finally { setExporting(false); }
@@ -137,7 +145,7 @@ export function App() {
     attach(new DocumentSession(doc.path, doc.contents, doc.version, (contents, version) => api.save(ws.id, doc.path, contents, version)));
   }
   async function activate(ws: Workspace) {
-    workspaceRef.current = ws; setWorkspace(ws); setRevision(n => n + 1); attach(scratch.current!);
+    workspaceRef.current = ws; setWorkspace(ws); setRevision(n => n + 1); setNotesCollapsed(true); setNoteMenu(null); attach(emptyWorkspace.current);
     if (ws.watchWarning) setNotice(ws.watchWarning);
     if (ws.selected) await load(ws, ws.selected);
     else {
@@ -146,7 +154,34 @@ export function App() {
       if (first) await load(ws, first.path);
     }
   }
-  const openFile = (path: string) => { if (current.current !== scratch.current && current.current !== guide.current && path === current.current.path) return; void transition(async () => { if (workspaceRef.current) await load(workspaceRef.current, path); }); };
+  const openFile = (path: string) => { if (!isPersonal(current.current) && current.current !== guide.current && path === current.current.path) return; void transition(async () => { if (workspaceRef.current) await load(workspaceRef.current, path); }); };
+  function openNote(path: string) {
+    const note = notebook.current!.find(path);
+    if (!note || note === current.current) return;
+    void transition(async () => { attach(note); setNotesCollapsed(false); });
+  }
+  function beginNote(note?: DocumentSession) {
+    setNoteMenu(null); setNoteAction({ note }); setName(note?.path || 'Untitled.md'); setActionError('');
+  }
+  function newDocument() {
+    if (!workspaceRef.current || isPersonal(current.current)) beginNote();
+    else begin({ kind: 'file', path: '' });
+  }
+  function showQuick() {
+    setQuickNotes(!workspaceRef.current || isPersonal(current.current)); setResults([]); setTruncated(false); setQuery(''); setQuick(true);
+  }
+  const openQuick = (path: string) => { if (quickNotes) openNote(path); else openFile(path); setQuick(false); };
+  async function submitNote(event: SubmitEvent) {
+    event.preventDefault(); if (!noteAction || navigating.current) return;
+    navigating.current = true; setLocked(true);
+    try {
+      if (!noteAction.note && !await confirmLeave()) return;
+      if (noteAction.note) notebook.current!.rename(noteAction.note, name);
+      else attach(notebook.current!.create(name));
+      setNotesRevision(n => n + 1); setNotesCollapsed(false); setNoteAction(null);
+    } catch (error) { setActionError(String(error).replace(/^Error: /, '')); }
+    finally { navigating.current = false; setLocked(false); }
+  }
   const choose = (folder: boolean) => void transition(async () => { const ws = await api.choose(folder); if (ws) await activate(ws); });
   const requested = () => {
     // Existing filesystem sessions must save before native activation changes
@@ -177,7 +212,8 @@ export function App() {
   function leaveGuide() {
     void transition(async () => {
       const previous = guideReturn.current;
-      if (previous && previous.session !== scratch.current && workspaceRef.current) await load(workspaceRef.current, previous.session.path);
+      if (previous && (isPersonal(previous.session) || previous.session === emptyWorkspace.current)) attach(previous.session);
+      else if (previous && workspaceRef.current) await load(workspaceRef.current, previous.session.path);
       else attach(scratch.current!);
       setMode(previous?.mode || 'split'); guideReturn.current = undefined; guideLine.current = null;
     });
@@ -197,7 +233,7 @@ export function App() {
         timer = setTimeout(() => {
           setRevision(n => n + 1);
           const active = current.current, ws = workspaceRef.current;
-          if (!ws || active === scratch.current || active === guide.current || isImage(active.path) || navigating.current) return;
+          if (!ws || isPersonal(active) || active === guide.current || active === emptyWorkspace.current || isImage(active.path) || navigating.current) return;
           // Read after any in-flight write has settled; otherwise a watch notification can return an obsolete version.
           void (async () => {
             await active.settled().catch(() => {});
@@ -213,7 +249,7 @@ export function App() {
         switch (event.payload) {
           case 'open-file': callbacks.current.choose(false); break;
           case 'open-folder': callbacks.current.choose(true); break;
-          case 'new-file': begin({ kind: 'file', path: '' }); break;
+          case 'new-file': newDocument(); break;
           case 'guide': callbacks.current.openGuide(); break;
           case 'shortcuts': setShortcuts(true); break;
           case 'zen': callbacks.current.toggleZen(); break;
@@ -252,9 +288,9 @@ export function App() {
       if (document.querySelector('dialog[open]') && key !== 's') return;
       event.preventDefault();
       if (key === 's') void current.current.flush().catch(report);
-      if (key === 'n') begin({ kind: 'file', path: '' });
+      if (key === 'n') newDocument();
       if (key === 'o') choose(event.shiftKey);
-      if (key === 'p') { setQuery(''); setQuick(true); }
+      if (key === 'p') showQuick();
       if (key === 'b') setSidebar(value => !value);
       if (key === '\\' && hasPreview(current.current.path)) setMode(value => value === 'split' ? 'source' : 'split');
     };
@@ -268,11 +304,12 @@ export function App() {
     if (!quick) return;
     let cancelled = false; setQuickIndex(0);
     const timer = setTimeout(() => {
+      if (quickNotes) { setResults(notebook.current!.documents.map(note => note.path).filter(path => path.toLowerCase().includes(query.toLowerCase()))); setTruncated(false); return; }
       if (!workspace) { setResults([]); return; }
       void api.search(workspace.id, query).then(result => { if (!cancelled) { setResults(result.paths); setTruncated(result.truncated); } }).catch(report);
     }, 80);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [quick, query, workspace]);
+  }, [quick, query, workspace, quickNotes, notesRevision]);
 
   function begin(next: FileAction) {
     if (!workspaceRef.current) { setNotice('Open a folder first to create and organize files.'); return; }
@@ -287,11 +324,12 @@ export function App() {
     const path = parent ? `${parent}/${filename}` : filename;
     navigating.current = true; setLocked(true);
     try {
-      const leavesDocument = action.kind === 'file' || (action.kind === 'rename' && (session.path === action.path || session.path.startsWith(action.path + '/')));
+      const affectsDocument = !isLocal && (session.path === action.path || session.path.startsWith(action.path + '/'));
+      const leavesDocument = action.kind === 'file' || (action.kind === 'rename' && affectsDocument);
       if (leavesDocument && !await confirmLeave()) return;
       if (action.kind === 'rename') {
         await api.rename(workspace.id, action.path, path);
-        if (session.path === action.path || session.path.startsWith(action.path + '/')) await load(workspace, path + session.path.slice(action.path.length));
+        if (affectsDocument) await load(workspace, path + session.path.slice(action.path.length));
       } else if (action.kind === 'duplicate') await api.duplicate(workspace.id, action.path, path);
       else {
         await api.create(workspace.id, path, action.kind === 'folder');
@@ -324,9 +362,11 @@ export function App() {
   }
   function followLink(href: string) {
     if (/^(https?:|mailto:)/i.test(href)) void api.external(href).catch(report);
+    else if (isNote) { try { const path = resolveRelative(session.path, href); if (notebook.current!.find(path)) openNote(path); else setNotice('This note was not found in Scratchpad.'); } catch (error) { report(error); } }
     else if (workspace) { try { const path = resolveRelative(session.path, href); openFile(path); } catch (error) { report(error); } }
     else setNotice('Open a folder to follow links to other documents.');
   }
+  const notes = <Notes documents={notebook.current.documents} active={session} collapsed={notesCollapsed} onToggle={() => setNotesCollapsed(!notesCollapsed)} onOpen={openNote} onCreate={() => beginNote()} onMenu={(note, x, y) => { setMenu(null); setNoteMenu({ note, x, y }); }} />;
   const button = (icon: IconName, title: string, onClick: () => void, active = false) => <button class={`icon-button ${active ? 'active' : ''}`} title={title} aria-label={title} aria-pressed={active} onClick={onClick}><Icon name={icon} /></button>;
 
   return <div class={`app ${zen ? 'zen' : ''} ${locked ? 'busy' : ''}`}>
@@ -338,19 +378,19 @@ export function App() {
     <div class="app-body">
       {sidebar && <><aside class="sidebar" style={{ width: sidebarWidth }}>
         <div class="sidebar-top"><span class="eyebrow">WORKSPACE</span><button class="icon-button" title="Open folder" aria-label="Open folder" onClick={() => choose(true)}><Icon name="folder" /></button></div>
-        <button class="quick-open" onClick={() => { setQuery(''); setQuick(true); }}><Icon name="search" size={14} /><span>Find a file…</span><kbd>{modifier}P</kbd></button>
-        {workspace ? <><div class="workspace-label workspace-heading"><button class="workspace-toggle" aria-expanded={!workspaceCollapsed} aria-controls="workspace-files" onClick={() => setWorkspaceCollapsed(!workspaceCollapsed)}><Icon name="chevron" size={11} class={workspaceCollapsed ? '' : 'rotated'} /><span>{workspace.name}</span></button><div class="explorer-actions">{button('new-file', 'New file', () => begin({ kind: 'file', path: '' }))}{button('new-folder', 'New folder', () => begin({ kind: 'folder', path: '' }))}</div></div><Explorer collapsed={workspaceCollapsed} workspace={workspace} active={isLocal ? '' : session.path} revision={revision} onOpen={openFile} onMenu={(entry, x, y) => setMenu({ entry, x, y })} onError={report} /></> : <div class="workspace-empty"><div class="workspace-label"><Icon name="chevron" size={11} class="rotated" /><span>Getting started</span></div><button class={`scratch-row ${isScratch ? 'selected' : ''}`} onClick={() => void transition(async () => attach(scratch.current!))}><span class="file-glyph">M</span>Scratchpad.md</button><p>Your next idea<br />starts with a folder.</p><button class="open-folder-button" onClick={() => choose(true)}><Icon name="folder" size={15} />Open a folder<Icon name="arrow" size={14} /></button><button class="text-button" onClick={() => choose(false)}>or open a file</button></div>}
-        <div class="sidebar-bottom">{workspace && <button class="scratch-link" onClick={() => void transition(async () => attach(scratch.current!))}><Icon name="feather" size={14} />Scratchpad</button>}</div>
+        <button class="quick-open" onClick={showQuick}><Icon name="search" size={14} /><span>Find a file…</span><kbd>{modifier}P</kbd></button>
+        {workspace ? <><div class="workspace-label workspace-heading"><button class="workspace-toggle" aria-expanded={!workspaceCollapsed} aria-controls="workspace-files" onClick={() => setWorkspaceCollapsed(!workspaceCollapsed)}><Icon name="chevron" size={11} class={workspaceCollapsed ? '' : 'rotated'} /><span>{workspace.name}</span></button><div class="explorer-actions">{button('new-file', 'New file', () => begin({ kind: 'file', path: '' }))}{button('new-folder', 'New folder', () => begin({ kind: 'folder', path: '' }))}</div></div><Explorer collapsed={workspaceCollapsed} workspace={workspace} active={isLocal ? '' : session.path} revision={revision} onOpen={openFile} onMenu={(entry, x, y) => setMenu({ entry, x, y })} onError={report} /></> : <>{notes}<div class="workspace-empty"><p>A place for your notes.<br />A folder when you need it.</p><button class="open-folder-button" onClick={() => choose(true)}><Icon name="folder" size={15} />Open a folder<Icon name="arrow" size={14} /></button><button class="text-button" onClick={() => choose(false)}>or open a file</button></div></>}
+        {workspace && <div class="sidebar-bottom">{notes}</div>}
       </aside><div class="resize-handle sidebar-resize" role="separator" aria-label="Resize sidebar" aria-orientation="vertical" tabIndex={0} aria-valuenow={sidebarWidth} aria-valuemin={180} aria-valuemax={380} onPointerDown={event => resize(event, 'sidebar')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSidebarWidth(n => Math.max(180, Math.min(380, n + (event.key === 'ArrowLeft' ? -10 : 10)))); }} /></>}
       <main class="main">
-        <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{fileGlyph(session.path)}</span><strong>{basename(session.path)}</strong>{session.dirty && <span class="unsaved-dot" role="img" aria-label="Unsaved changes" title="Unsaved changes" />}{isScratch && <span class="scratch-badge">SCRATCHPAD</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isGuide && !imageFile && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
-          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}{canExportPdf(session.path) && <button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>}{!imageFile && <>{!isGuide && <button class="icon-button" title={`Save (${modifier}S)`} aria-label="Save file" disabled={locked || !session.dirty} onClick={() => void session.flush().catch(report)}><Icon name="save" /></button>}{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), viewMode === 'source')}{previewable && <>{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</>}</div></>}</div>
+        <div class="document-toolbar"><div class="document-title">{isGuide && <button class="guide-back" onClick={leaveGuide}>← Back</button>}<span class="file-glyph">{fileGlyph(session.path)}</span><strong>{isEmpty ? workspace?.name : basename(session.path)}</strong>{session.dirty && <span class="unsaved-dot" role="img" aria-label="Unsaved changes" title="Unsaved changes" />}{isNote && <span class="scratch-badge">{isScratch ? 'SCRATCHPAD' : 'NOTE'}</span>}{isGuide && <span class="scratch-badge">GUIDE</span>}{!isGuide && !imageFile && !isEmpty && <span class={`save-state ${status}`} aria-live="polite">{status === 'saved' ? <><Icon name="check" size={12} />Saved</> : status === 'saving' ? 'Saving…' : status === 'modified' ? 'Unsaved' : status === 'conflict' ? 'Changed on disk' : 'Save failed'}</span>}</div>
+          <div class="document-actions">{zen && <>{button('focus', 'Exit Zen mode', () => { setZen(false); setSettings(false); }, true)}{button(dark ? 'moon' : 'sun', 'Settings', () => setSettings(!settings), settings)}</>}{button('terminal', 'Toggle terminal (Ctrl+`)', toggleTerminal, terminalVisible)}{canExportPdf(session.path) && <button class="icon-button" title="Export PDF" aria-label="Export PDF" disabled={exporting} onClick={() => void exportPdf()}><Icon name="pdf" /></button>}{!imageFile && !isEmpty && <>{!isGuide && <button class="icon-button" title={`Save (${modifier}S)`} aria-label="Save file" disabled={locked || !session.dirty} onClick={() => void session.flush().catch(report)}><Icon name="save" /></button>}{button('diff', 'Git diff', () => setMode(mode === 'diff' ? 'split' : 'diff'), mode === 'diff')}<div class="view-switch">{button('file', 'Source view', () => setMode('source'), viewMode === 'source')}{previewable && <>{button('split', 'Split view', () => setMode('split'), mode === 'split')}{button('eye', 'Preview view', () => setMode('preview'), mode === 'preview')}</>}</div></>}</div>
         </div>
         {(error || status === 'error' || status === 'conflict') && <div class="error-banner" role="alert"><span>{error || session.error.replace('CONFLICT: ', '')}</span>{status === 'conflict' && <><button onClick={() => { if (workspace) void api.read(workspace.id, session.path).then(setDisk).catch(report); }}>Review disk</button><button onClick={() => begin({ kind: 'copy', path: dirname(session.path) })}>Save a copy</button></>}{status === 'error' && <button onClick={() => void session.flush().catch(report)}>Retry save</button>}{error && <button class="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><Icon name="close" size={14} /></button>}</div>}
         <div class={`panes mode-${viewMode}`} ref={panes}>
-          {imageFile && workspace ? <ImageViewer key={`${workspace.id}-${session.path}`} workspaceId={workspace.id} path={session.path} revision={revision} /> : <>
+          {isEmpty ? <div class="workspace-placeholder"><Icon name="folder" size={28} /><h2>Choose a file to begin.</h2><p>Open a document from the sidebar, or create a new one.</p><button class="primary-button" onClick={() => begin({ kind: 'file', path: '' })}>New file</button></div> : imageFile && workspace ? <ImageViewer key={`${workspace.id}-${session.path}`} workspaceId={workspace.id} path={session.path} revision={revision} /> : <>
           <section class="source-pane" style={{ width: viewMode === 'split' ? `${split}%` : '100%' }} aria-label="Source editor">
-            <div class="pane-label"><span>{(fileLanguage(session.path)?.name || 'Plain text').toUpperCase()}</span><span>{isGuide ? 'Feature guide · read only' : isScratch ? 'Your local scratchpad' : dirname(session.path)}</span></div>
+            <div class="pane-label"><span>{(fileLanguage(session.path)?.name || 'Plain text').toUpperCase()}</span><span>{isGuide ? 'Feature guide · read only' : isNote ? 'Your local notes' : dirname(session.path)}</span></div>
             <Editor session={session} dark={dark} locked={locked || isGuide} vimEnabled={vimEnabled} onView={view => { editor.current = view; connectScrollSync(); }} />
           </section>
           {viewMode === 'split' && <div class="resize-handle split-resize" role="separator" aria-label="Resize editor and preview" aria-orientation="vertical" tabIndex={0} aria-valuenow={split} aria-valuemin={25} aria-valuemax={75} onPointerDown={event => resize(event, 'split')} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') setSplit(n => Math.max(25, Math.min(75, n + (event.key === 'ArrowLeft' ? -2 : 2)))); }} />}
@@ -361,11 +401,14 @@ export function App() {
       </main>
     </div>
     {settings && <><div class="popover-dismiss" onClick={() => setSettings(false)} /><div class="appearance-popover" role="region" aria-label="Settings"><label class="profile-setting"><span>UI profile</span><select aria-label="UI profile" value={profile} onChange={event => setProfile(event.currentTarget.value)}><option value="feather">Feather</option><option value="github">GitHub</option><option value="midnight">Midnight</option></select></label><div class="theme-options">{(['system', 'light', 'dark'] as const).map(value => <button class={appearance === value ? 'chosen' : ''} aria-pressed={appearance === value} onClick={() => setAppearance(value)}><Icon name={value === 'system' ? 'monitor' : value === 'light' ? 'sun' : 'moon'} size={19} /><span>{value[0].toUpperCase() + value.slice(1)}</span></button>)}</div><div class="zoom-settings"><span>Zoom</span><button aria-label="Zoom out" onClick={() => setZoom(value => Math.max(.7, Math.round((value - .1) * 10) / 10))}>−</button><button aria-label="Reset zoom" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" onClick={() => setZoom(value => Math.min(1.6, Math.round((value + .1) * 10) / 10))}>+</button></div><div class="editor-settings"><label class="vim-setting"><span>Zen mode<small>Hide the header and sidebar.</small></span><input type="checkbox" role="switch" aria-label="Zen mode" checked={zen} onChange={event => setZen(event.currentTarget.checked)} /></label><label class="vim-setting"><span>Vim mode<small>Navigate with h j k l. Press i to write.<br />Esc returns to Normal mode.</small></span><input type="checkbox" role="switch" aria-label="Vim mode" checked={vimEnabled} onChange={event => setVimEnabled(event.currentTarget.checked)} /></label></div></div></>}
+    {noteMenu && <><div class="popover-dismiss" onClick={() => setNoteMenu(null)} /><div class="context-menu" role="menu" aria-label="Note actions" style={{ left: Math.min(noteMenu.x, innerWidth - 206), top: Math.min(noteMenu.y, innerHeight - 120) }}><button role="menuitem" onClick={() => beginNote(noteMenu.note)}><Icon name="rename" />Rename</button><button role="menuitem" class="danger-text" onClick={() => { setDeleteNote(noteMenu.note); setNoteMenu(null); }}><Icon name="trash" />Delete note</button></div></>}
+    {noteAction && <Dialog title={noteAction.note ? 'Rename note' : 'A new note'} onClose={() => { if (!locked) setNoteAction(null); }}><form onSubmit={submitNote}><p class="dialog-description">Saved in Scratchpad, available from any folder.</p><label class="input-label" for="note-name">Note name</label><input id="note-name" class="text-input" autoFocus value={name} onInput={event => setName(event.currentTarget.value)} onFocus={event => event.currentTarget.select()} placeholder="Untitled.md" />{actionError && <p class="field-error" role="alert">{actionError}</p>}<div class="dialog-buttons"><button type="button" class="secondary-button" disabled={locked} onClick={() => setNoteAction(null)}>Cancel</button><button class="primary-button" type="submit" disabled={locked}>{locked ? 'Working…' : noteAction.note ? 'Rename' : 'Create'}</button></div></form></Dialog>}
+    {deleteNote && <Dialog title="Delete note?" onClose={() => { if (!locked) setDeleteNote(null); }}><p class="dialog-description">“{deleteNote.path}” will be permanently deleted from Scratchpad.</p><div class="dialog-buttons"><button class="secondary-button" disabled={locked} onClick={() => setDeleteNote(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { const active = current.current === deleteNote; notebook.current!.remove(deleteNote); if (active) attach(scratch.current!); setDeleteNote(null); setNotesRevision(n => n + 1); }, false)}>Delete note</button></div></Dialog>}
     {menu && <><div class="popover-dismiss" onClick={() => setMenu(null)} /><div class="context-menu" role="menu" style={{ left: Math.min(menu.x, innerWidth - 206), top: Math.min(menu.y, innerHeight - 260) }}>{menu.entry.isDir && <><button role="menuitem" onClick={() => begin({ kind: 'file', path: menu.entry.path })}><Icon name="plus" />New file here</button><button role="menuitem" onClick={() => begin({ kind: 'folder', path: menu.entry.path })}><Icon name="folder" />New folder here</button></>}<button role="menuitem" onClick={() => begin({ kind: 'rename', path: menu.entry.path })}><Icon name="rename" />Rename</button>{!menu.entry.isDir && <button role="menuitem" onClick={() => begin({ kind: 'duplicate', path: menu.entry.path })}><Icon name="copy" />Duplicate</button>}<button role="menuitem" onClick={() => { if (workspace) void api.reveal(workspace.id, menu.entry.path).catch(report); setMenu(null); }}><Icon name="external" />Reveal in file manager</button><hr /><button role="menuitem" class="danger-text" onClick={() => { setDeleteEntry(menu.entry); setMenu(null); }}><Icon name="trash" />Move to trash</button></div></>}
     {action && <Dialog title={{ file: 'A new page', folder: 'A new folder', rename: 'Rename', duplicate: 'Duplicate file', copy: 'Save a copy' }[action.kind]} onClose={() => { if (!locked) setAction(null); }}><form onSubmit={submitAction}><p class="dialog-description">{action.kind === 'copy' ? 'Keep your current text in a new file.' : 'Give it a name. Keep the rest simple.'}</p><label class="input-label" for="filename">{action.kind === 'folder' ? 'Folder name' : 'File name'}</label><input id="filename" class="text-input" autoFocus value={name} onInput={event => setName(event.currentTarget.value)} onFocus={event => event.currentTarget.select()} placeholder={action.kind === 'folder' ? 'research' : 'Untitled.md'} />{actionError && <p class="field-error" role="alert">{actionError}</p>}<div class="dialog-buttons"><button type="button" class="secondary-button" disabled={locked} onClick={() => setAction(null)}>Cancel</button><button class="primary-button" type="submit" disabled={locked}>{locked ? 'Working…' : action.kind === 'rename' ? 'Rename' : action.kind === 'copy' ? 'Save copy' : 'Create'}</button></div></form></Dialog>}
-    {deleteEntry && <Dialog title="Move to trash?" onClose={() => setDeleteEntry(null)}><p class="dialog-description">“{deleteEntry.name}”{deleteEntry.isDir ? ' and everything inside it' : ''} will move to your system trash.</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => setDeleteEntry(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { if (!workspace) return; await api.trash(workspace.id, deleteEntry.path); if (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/')) attach(scratch.current!); setDeleteEntry(null); setRevision(n => n + 1); }, session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/'))}>Move to trash</button></div></Dialog>}
+    {deleteEntry && <Dialog title="Move to trash?" onClose={() => setDeleteEntry(null)}><p class="dialog-description">“{deleteEntry.name}”{deleteEntry.isDir ? ' and everything inside it' : ''} will move to your system trash.</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => setDeleteEntry(null)}>Keep it</button><button class="danger-button" disabled={locked} onClick={() => void transition(async () => { if (!workspace) return; await api.trash(workspace.id, deleteEntry.path); if (!isLocal && (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/'))) attach(scratch.current!); setDeleteEntry(null); setRevision(n => n + 1); }, !isLocal && (session.path === deleteEntry.path || session.path.startsWith(deleteEntry.path + '/')))}>Move to trash</button></div></Dialog>}
     {disk && <Dialog title="This file has two versions" class="conflict-dialog" onClose={() => setDisk(null)}><p class="dialog-description">Your text is preserved. Compare it with the version on disk before choosing what to save.</p><div class="conflict-columns"><div><h3>Your edits</h3><pre>{session.text}</pre></div><div><h3>On disk</h3><pre>{disk.contents}</pre></div></div><div class="dialog-buttons"><button class="secondary-button" onClick={() => { session.reload(disk.contents, disk.version); setDisk(null); setError(''); }}>Use disk version</button><button class="primary-button" onClick={() => { session.version = disk.version; session.status = 'modified'; void session.flush().then(() => { setDisk(null); setError(''); }).catch(report); }}>Save my version</button></div></Dialog>}
-    {quick && <Dialog title="Find a file" class="quick-dialog" onClose={() => setQuick(false)}><div class="quick-input"><Icon name="search" size={18} /><input autoFocus aria-label="Find a file" placeholder="Type a file name…" value={query} onInput={event => setQuery(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setQuickIndex(n => Math.max(0, Math.min(results.length - 1, n + (event.key === 'ArrowDown' ? 1 : -1)))); } if (event.key === 'Enter' && results[quickIndex]) { openFile(results[quickIndex]); setQuick(false); } }} /><kbd>esc</kbd></div><div class="quick-results" role="listbox" aria-label="Matching files">{results.map((path, index) => <button role="option" aria-selected={quickIndex === index} class={quickIndex === index ? 'highlighted' : ''} onClick={() => { openFile(path); setQuick(false); }}><Icon name="file" /><span>{basename(path)}<small>{dirname(path) || workspace?.name}</small></span><Icon name="arrow" size={14} /></button>)}{!results.length && <p>{workspace ? 'No matching files.' : 'Open a folder to find your documents.'}</p>}</div>{truncated && <p class="quick-hint">Showing the first 200 matches within 50,000 entries. Narrow your search.</p>}</Dialog>}
+    {quick && <Dialog title="Find a file" class="quick-dialog" onClose={() => setQuick(false)}><div class="quick-input"><Icon name="search" size={18} /><input autoFocus aria-label="Find a file" placeholder="Type a file name…" value={query} onInput={event => setQuery(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setQuickIndex(n => Math.max(0, Math.min(results.length - 1, n + (event.key === 'ArrowDown' ? 1 : -1)))); } if (event.key === 'Enter' && results[quickIndex]) { openQuick(results[quickIndex]); } }} /><kbd>esc</kbd></div><div class="quick-results" role="listbox" aria-label="Matching files">{results.map((path, index) => <button role="option" aria-selected={quickIndex === index} class={quickIndex === index ? 'highlighted' : ''} onClick={() => openQuick(path)}><Icon name="file" /><span>{basename(path)}<small>{quickNotes ? 'Scratchpad' : dirname(path) || workspace?.name}</small></span><Icon name="arrow" size={14} /></button>)}{!results.length && <p>{quickNotes ? 'No matching notes.' : 'No matching files.'}</p>}</div>{truncated && <p class="quick-hint">Showing the first 200 matches within 50,000 entries. Narrow your search.</p>}</Dialog>}
     {shortcuts && <Dialog title="A few useful shortcuts" onClose={() => setShortcuts(false)}><div class="shortcut-list">{[['New file', `${modifier} N`], ['Open file', `${modifier} O`], ['Open folder', `${modifier} ⇧ O`], ['Save', `${modifier} S`], ['Undo', `${modifier} Z`], ['Redo', `${modifier} ⇧ Z`], ['Toggle Zen mode', `${modifier} J`], ...(modifier === '⌘' ? [['Toggle fullscreen', '⌃ ⌘ F']] : []), ['Find a file', `${modifier} P`], ['Find in document', `${modifier} F`], ['Toggle sidebar', `${modifier} B`], ['Toggle preview', `${modifier} \\`]].map(([label, key]) => <div><span>{label}</span><kbd>{key}</kbd></div>)}</div><p class="shortcut-footnote">Double-click a preview block to jump to its source.<br />Save with {modifier}S or the Save button. A dot marks unsaved edits.</p></Dialog>}
     {unsaved && <Dialog title="Save changes?" onClose={() => unsaved.resolve('cancel')}><p class="dialog-description">Save changes to “{basename(unsaved.path)}” before leaving?</p><div class="dialog-buttons"><button class="secondary-button" onClick={() => unsaved.resolve('cancel')}>Cancel</button><button class="secondary-button" onClick={() => unsaved.resolve('discard')}>Discard changes</button><button class="primary-button" onClick={() => unsaved.resolve('save')}>Save changes</button></div></Dialog>}
     {notice && <div class="toast" role="status"><Icon name="check" size={16} /><span>{notice}</span><button class="icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><Icon name="close" size={14} /></button></div>}

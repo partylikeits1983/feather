@@ -77,7 +77,9 @@ Open any UTF-8 text file or a folder from the workspace button or the File menu.
 - Click the workspace heading to collapse or expand the entire tree.
 - The buttons beside it create a file or folder.
 - Item action menus offer rename, move to trash, and reveal in the file manager. Files can also be duplicated; folder menus can create items inside that folder.
-- Scratchpad lives at the bottom-left. Use Save to keep its text locally between launches.
+- Scratchpad holds your personal Markdown notes, including the original `Scratchpad.md`. Click **+** to create a note; its action menu offers rename and delete. Use Save to keep edits locally between launches.
+- Opening a folder collapses Scratchpad at the bottom-left. Expand it to reach your notes from any workspace. Personal notes are stored in Feather, separate from the opened folder.
+- **Command+N / Ctrl+N** creates a note while you are in Scratchpad, or a file while you are in a workspace document. Quick open searches the current collection.
 
 The terminal launcher accepts a file or folder:
 

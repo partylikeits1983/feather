@@ -442,9 +442,12 @@ test('collapse the workspace without losing expanded folders and keep Scratchpad
   const footer = page.getByRole('button', { name: 'Scratchpad', exact: true });
   await expect(footer).toBeInViewport();
   const bounds = await footer.boundingBox();
-  expect(bounds!.x).toBe(8);
-  expect(600 - bounds!.y - bounds!.height).toBe(8);
+  expect(bounds!.x).toBe(12);
+  expect(600 - bounds!.y - bounds!.height).toBeLessThanOrEqual(10);
   await footer.click();
+  await expect(footer).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.document-title strong')).toHaveText('notes.md');
+  await page.getByRole('treeitem', { name: 'M Scratchpad.md', exact: true }).click();
   await expect(page.locator('.document-title strong')).toHaveText('Scratchpad.md');
 });
 
@@ -733,4 +736,103 @@ test('a pending launch request preserves early scratchpad edits until explicitly
   await prompt.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'My notes', exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('feather.scratchpad'))).toBe('# Written before native startup');
+});
+
+test('personal notes stay separate from matching workspace files and collapse when changing folders', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  const notes = page.getByRole('tree', { name: 'Notes', exact: true });
+  const files = page.getByRole('tree', { name: 'Files', exact: true });
+  const toggle = page.getByRole('button', { name: 'Scratchpad', exact: true });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByLabel('Note name').fill('notes.md');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await source.fill('# Personal thoughts');
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(notes.getByRole('treeitem', { name: 'M notes.md', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(files.getByRole('treeitem', { name: 'M notes.md', exact: true })).toHaveAttribute('aria-selected', 'false');
+  await selectNativeMenu(page, 'guide');
+  await page.getByRole('button', { name: /Back/ }).click();
+  await expect(source).toContainText('Personal thoughts');
+  await page.evaluate(() => {
+    const state = (window as unknown as { testWorkspace: { files: Record<string, { contents: string; version: string }>; emit: (event: string, payload: unknown) => void } }).testWorkspace;
+    state.files['notes.md'] = { contents: '# Workspace changed', version: '2' };
+    state.emit('workspace-changed', [1, ['notes.md']]);
+  });
+  await page.waitForTimeout(300);
+  await expect(source).toContainText('Personal thoughts');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await files.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await expect(source).toContainText('Workspace changed');
+  await notes.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await expect(source).toContainText('Personal thoughts');
+  await files.getByRole('treeitem', { name: 'M notes.md', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.getByLabel('File name').fill('renamed.md');
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  await expect(page.locator('.document-title strong')).toHaveText('notes.md');
+  await expect(source).toContainText('Personal thoughts');
+  await page.evaluate(() => {
+    const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    const invoke = internals.invoke;
+    internals.invoke = (command, args) => command === 'choose_workspace'
+      ? Promise.resolve({ id: 2, name: 'another-folder', root: '/another-folder', selected: 'proof.md', watchWarning: null }) : invoke(command, args);
+  });
+  await selectNativeMenu(page, 'open-folder');
+  await expect(page.getByRole('button', { name: 'another-folder', exact: true })).toBeVisible();
+  await expect(notes).toBeHidden();
+  await expect(source).toContainText('The proof');
+  await toggle.click();
+  await notes.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await expect(source).toContainText('Personal thoughts');
+  await page.screenshot({ path: 'artifacts/feather-notes-workspace.png' });
+  await page.reload();
+  await expect(notes).toBeHidden();
+  await toggle.click();
+  await notes.getByRole('treeitem', { name: 'M notes.md', exact: true }).click();
+  await expect(source).toContainText('Personal thoughts');
+});
+
+test('opening a directory from personal notes saves or cancels before hiding them', async ({ page }) => {
+  await deferNativeStartup(page, true);
+  await page.goto('/');
+  await page.evaluate(() => (window as unknown as { resumeNativeStartup: () => void }).resumeNativeStartup());
+  await selectNativeMenu(page, 'new-file');
+  await page.getByLabel('Note name').fill('Journal');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  const source = page.getByRole('textbox', { name: 'Markdown source' });
+  await source.fill('# Keep my thoughts');
+  await selectNativeMenu(page, 'open-folder');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('tree', { name: 'Notes', exact: true })).toBeVisible();
+  await expect(source).toContainText('Keep my thoughts');
+  await selectNativeMenu(page, 'open-folder');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  await expect(page.getByRole('tree', { name: 'Notes', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Scratchpad', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'M Journal.md', exact: true }).click();
+  await expect(source).toContainText('Keep my thoughts');
+});
+
+test('opening an empty directory hides personal note contents until Scratchpad is opened', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('feather.scratchpad', '# Personal scratch text'));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'My notes' })).toBeVisible();
+  await page.evaluate(() => {
+    const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (command: string, args: Record<string, unknown>) => Promise<unknown> } }).__TAURI_INTERNALS__;
+    const invoke = internals.invoke;
+    internals.invoke = (command, args) => command === 'choose_workspace'
+      ? Promise.resolve({ id: 2, name: 'empty-folder', root: '/empty-folder', selected: null, watchWarning: null })
+      : command === 'list_directory' && args.workspaceId === 2 ? Promise.resolve([]) : invoke(command, args);
+  });
+  await selectNativeMenu(page, 'open-folder');
+  await expect(page.getByRole('heading', { name: 'Choose a file to begin.' })).toBeVisible();
+  await expect(page.getByRole('tree', { name: 'Notes', exact: true })).toBeHidden();
+  await expect(page.getByRole('textbox', { name: 'Markdown source' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Scratchpad', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'M Scratchpad.md', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Personal scratch text' })).toBeVisible();
 });
